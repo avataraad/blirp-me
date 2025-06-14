@@ -82,7 +82,7 @@ const AppNavigator = () => {
             fontSize: 24,
             fontWeight: '600',
           },
-          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
         }}
       >
         <Stack.Screen 
