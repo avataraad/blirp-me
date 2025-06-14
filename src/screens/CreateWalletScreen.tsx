@@ -9,10 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
+import { useWallet } from '../contexts/WalletContext';
+import walletService from '../services/walletService';
 
 type CreateWalletScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -27,43 +30,51 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
   const [tag, setTag] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const { createWallet, isLoading } = useWallet();
 
-  const handleTagChange = (text: string) => {
+  const handleTagChange = async (text: string) => {
     // Remove @ if user types it, only allow alphanumeric and underscore
     const cleanedTag = text.replace(/[@\s]/g, '').toLowerCase();
     setTag(cleanedTag);
     
     // Reset availability check
-    if (cleanedTag.length > 0) {
+    if (cleanedTag.length >= 3) {
       setIsChecking(true);
-      // Simulate availability check
-      setTimeout(() => {
-        setIsAvailable(cleanedTag.length >= 3);
-        setIsChecking(false);
-      }, 500);
+      // Check availability against service
+      const available = await walletService.isTagAvailable(cleanedTag);
+      setIsAvailable(available);
+      setIsChecking(false);
     } else {
       setIsAvailable(null);
     }
   };
 
-  const handleCreateWallet = () => {
+  const handleCreateWallet = async () => {
     if (!isAvailable || tag.length < 3) {
       Alert.alert('Invalid Tag', 'Please choose a valid tag with at least 3 characters.');
       return;
     }
 
-    // For now, just navigate to main tabs
-    // We'll implement actual wallet creation later
-    Alert.alert(
-      'Wallet Created!', 
-      'Your wallet has been created successfully.',
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('MainTabs'),
-        },
-      ]
-    );
+    // Create the actual wallet
+    const success = await createWallet(tag);
+    
+    if (success) {
+      Alert.alert(
+        'Wallet Created!', 
+        'Your wallet has been created and secured with your device biometrics.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('MainTabs'),
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Error',
+        'Failed to create wallet. Please try again.',
+      );
+    }
   };
 
   return (
@@ -116,17 +127,21 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={[
               styles.button,
-              (!isAvailable || tag.length < 3) && styles.buttonDisabled,
+              (!isAvailable || tag.length < 3 || isLoading) && styles.buttonDisabled,
             ]}
             onPress={handleCreateWallet}
-            disabled={!isAvailable || tag.length < 3}
+            disabled={!isAvailable || tag.length < 3 || isLoading}
           >
-            <Text style={[
-              styles.buttonText,
-              (!isAvailable || tag.length < 3) && styles.buttonTextDisabled,
-            ]}>
-              Continue
-            </Text>
+            {isLoading ? (
+              <ActivityIndicator color={theme.colors.text.inverse} />
+            ) : (
+              <Text style={[
+                styles.buttonText,
+                (!isAvailable || tag.length < 3) && styles.buttonTextDisabled,
+              ]}>
+                Continue
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
 
