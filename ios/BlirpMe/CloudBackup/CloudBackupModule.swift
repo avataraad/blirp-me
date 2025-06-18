@@ -110,15 +110,53 @@ class CloudBackupModule: NSObject {
         }
     }
     
-    // MARK: - Write Data (to be implemented in Issue #5)
+    // MARK: - Write Data
     
     @objc
     func writeData(_ credentialID: String,
                    privateKey: String,
                    resolver: @escaping RCTPromiseResolveBlock,
                    rejecter: @escaping RCTPromiseRejectBlock) {
-        // TODO: Implement in Issue #5
-        rejecter("NOT_IMPLEMENTED", "Write data not yet implemented", nil)
+        
+        do {
+            // Validate private key format
+            try DataConverter.validatePrivateKey(privateKey)
+            
+            // Convert inputs
+            let credentialIDData = try DataConverter.base64ToData(credentialID)
+            let privateKeyData = try DataConverter.stringToData(privateKey)
+            let challenge = try ChallengeGenerator.generateChallenge()
+            
+            let delegate = PasskeyWriteDataDelegate(
+                relyingPartyIdentifier: relyingPartyIdentifier,
+                resolver: resolver,
+                rejecter: rejecter
+            )
+            self.writeDataDelegate = delegate
+            
+            let assertionRequest = delegate.provider.createCredentialAssertionRequest(
+                challenge: challenge
+            )
+            
+            // Set up large blob write
+            assertionRequest.largeBlob = ASAuthorizationPublicKeyCredentialLargeBlobAssertionInput.write(privateKeyData)
+            
+            // Specify the credential to use
+            let descriptor = ASAuthorizationPlatformPublicKeyCredentialDescriptor(
+                credentialID: credentialIDData
+            )
+            assertionRequest.allowedCredentials = [descriptor]
+            
+            let controller = ASAuthorizationController(authorizationRequests: [assertionRequest])
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests(options: .preferImmediatelyAvailableCredentials)
+            
+        } catch {
+            rejecter(CloudBackupError.dataConversionFailed.rawValue,
+                    error.localizedDescription,
+                    error)
+        }
     }
     
     // MARK: - Read Data (to be implemented in Issue #6)
