@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ethers } from 'ethers';
 import walletService from '../services/walletService';
+import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
+import { createBackup } from '../modules/cloudBackup/helpers';
 
 interface WalletContextType {
   currentWallet: ethers.Wallet | null;
@@ -11,6 +13,7 @@ interface WalletContextType {
   isLoading: boolean;
   createWallet: (tag: string) => Promise<boolean>;
   unlockWallet: (tag: string) => Promise<boolean>;
+  restoreFromCloudBackup: (tag: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
   signTransaction: (transaction: ethers.providers.TransactionRequest) => Promise<string>;
   logout: () => void;
@@ -65,6 +68,19 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
       if (!stored) {
         throw new Error('Failed to store wallet');
+      }
+
+      // Create cloud backup if available
+      if (isCloudBackupAvailable()) {
+        try {
+          console.log('Creating cloud backup for wallet...');
+          await createBackup(`${tag} Wallet Backup`, privateKey);
+          console.log('Cloud backup created successfully');
+        } catch (error) {
+          console.error('Cloud backup failed:', error);
+          // Don't fail wallet creation if backup fails
+          // User can retry backup later
+        }
       }
 
       // Create wallet instance
@@ -148,6 +164,63 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
+  // Restore wallet from cloud backup
+  const restoreFromCloudBackup = async (tag: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+
+      // Check if cloud backup is available
+      if (!isCloudBackupAvailable()) {
+        throw new Error('Cloud backup not available on this device');
+      }
+
+      // Read backup data from cloud
+      const backupData = await CloudBackup.readData();
+      if (!backupData.privateKey) {
+        throw new Error('No backup data found');
+      }
+
+      // Create wallet from backup
+      const wallet = new ethers.Wallet(backupData.privateKey);
+      
+      // Generate mnemonic from private key (for local storage)
+      // Note: This is a simplified approach - in production you might want to
+      // store the backup differently
+      const mnemonic = ethers.utils.entropyToMnemonic(
+        ethers.utils.arrayify(backupData.privateKey)
+      );
+
+      // Encrypt and store locally
+      const encryptionKey = `${tag}_key`;
+      const encryptedSeed = await walletService.encryptData(mnemonic, encryptionKey);
+      
+      // Store encrypted seed
+      const stored = await walletService.storeEncryptedSeed(
+        tag,
+        JSON.stringify(encryptedSeed)
+      );
+
+      if (!stored) {
+        throw new Error('Failed to store wallet locally');
+      }
+
+      // Set wallet state
+      setCurrentWallet(wallet);
+      setWalletAddress(wallet.address);
+      setWalletTag(tag);
+
+      // Refresh balance
+      await refreshBalance();
+
+      return true;
+    } catch (error) {
+      console.error('Error restoring from cloud backup:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Logout
   const logout = () => {
     setCurrentWallet(null);
@@ -168,6 +241,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         isLoading,
         createWallet,
         unlockWallet,
+        restoreFromCloudBackup,
         refreshBalance,
         signTransaction,
         logout,
