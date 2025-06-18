@@ -15,13 +15,15 @@
 		5166DA62901429BD08553F5C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8C3504F2221B7B1BD26924DD /* PrivacyInfo.xcprivacy */; };
 		7699B88040F8A987B510C191 /* libPods-BlirpMe-BlirpMeTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 19F6CBCC0A4E27FBF8BF4A61 /* libPods-BlirpMe-BlirpMeTests.a */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		90DA5AA32E0323D10083C9CE /* PasskeyRegistrationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A9D2E0323D10083C9CE /* PasskeyRegistrationDelegate.swift */; };
-		90DA5AA42E0323D10083C9CE /* PasskeyAuthorizationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A9B2E0323D10083C9CE /* PasskeyAuthorizationDelegate.swift */; };
-		90DA5AA52E0323D10083C9CE /* CloudBackupModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A9A2E0323D10083C9CE /* CloudBackupModule.swift */; };
-		90DA5AA62E0323D10083C9CE /* CloudBackupModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A992E0323D10083C9CE /* CloudBackupModule.m */; };
-		90DA5AA72E0323D10083C9CE /* CloudBackupError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AA02E0323D10083C9CE /* CloudBackupError.swift */; };
-		90DA5AA82E0323D10083C9CE /* PasskeyReadDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A9C2E0323D10083C9CE /* PasskeyReadDataDelegate.swift */; };
-		90DA5AA92E0323D10083C9CE /* PasskeyWriteDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5A9E2E0323D10083C9CE /* PasskeyWriteDataDelegate.swift */; };
+		90DA5AB92E03429B0083C9CE /* PasskeyReadDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAD2E03429B0083C9CE /* PasskeyReadDataDelegate.swift */; };
+		90DA5ABA2E03429B0083C9CE /* CloudBackupError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB12E03429B0083C9CE /* CloudBackupError.swift */; };
+		90DA5ABB2E03429B0083C9CE /* CloudBackupModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB62E03429B0083C9CE /* CloudBackupModule.m */; };
+		90DA5ABC2E03429B0083C9CE /* ChallengeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB32E03429B0083C9CE /* ChallengeGenerator.swift */; };
+		90DA5ABD2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAE2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift */; };
+		90DA5ABE2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAC2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift */; };
+		90DA5ABF2E03429B0083C9CE /* CloudBackupModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB72E03429B0083C9CE /* CloudBackupModule.swift */; };
+		90DA5AC02E03429B0083C9CE /* PasskeyWriteDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAF2E03429B0083C9CE /* PasskeyWriteDataDelegate.swift */; };
+		90DA5AC12E03429B0083C9CE /* DataConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB42E03429B0083C9CE /* DataConverter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,15 +55,15 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = BlirpMe/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-BlirpMe-BlirpMeTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BlirpMe-BlirpMeTests.release.xcconfig"; path = "Target Support Files/Pods-BlirpMe-BlirpMeTests/Pods-BlirpMe-BlirpMeTests.release.xcconfig"; sourceTree = "<group>"; };
 		8C3504F2221B7B1BD26924DD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = BlirpMe/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		90DA5A962E031BF00083C9CE /* BlirpMe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BlirpMe.entitlements; sourceTree = "<group>"; };
-		90DA5A972E031C180083C9CE /* BlirpMe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BlirpMe.entitlements; sourceTree = "<group>"; };
-		90DA5A992E0323D10083C9CE /* CloudBackupModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CloudBackupModule.m; sourceTree = "<group>"; };
-		90DA5A9A2E0323D10083C9CE /* CloudBackupModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupModule.swift; sourceTree = "<group>"; };
-		90DA5A9B2E0323D10083C9CE /* PasskeyAuthorizationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyAuthorizationDelegate.swift; sourceTree = "<group>"; };
-		90DA5A9C2E0323D10083C9CE /* PasskeyReadDataDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyReadDataDelegate.swift; sourceTree = "<group>"; };
-		90DA5A9D2E0323D10083C9CE /* PasskeyRegistrationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyRegistrationDelegate.swift; sourceTree = "<group>"; };
-		90DA5A9E2E0323D10083C9CE /* PasskeyWriteDataDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyWriteDataDelegate.swift; sourceTree = "<group>"; };
-		90DA5AA02E0323D10083C9CE /* CloudBackupError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupError.swift; sourceTree = "<group>"; };
+		90DA5AAC2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyAuthorizationDelegate.swift; sourceTree = "<group>"; };
+		90DA5AAD2E03429B0083C9CE /* PasskeyReadDataDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyReadDataDelegate.swift; sourceTree = "<group>"; };
+		90DA5AAE2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyRegistrationDelegate.swift; sourceTree = "<group>"; };
+		90DA5AAF2E03429B0083C9CE /* PasskeyWriteDataDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyWriteDataDelegate.swift; sourceTree = "<group>"; };
+		90DA5AB12E03429B0083C9CE /* CloudBackupError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupError.swift; sourceTree = "<group>"; };
+		90DA5AB32E03429B0083C9CE /* ChallengeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeGenerator.swift; sourceTree = "<group>"; };
+		90DA5AB42E03429B0083C9CE /* DataConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataConverter.swift; sourceTree = "<group>"; };
+		90DA5AB62E03429B0083C9CE /* CloudBackupModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CloudBackupModule.m; sourceTree = "<group>"; };
+		90DA5AB72E03429B0083C9CE /* CloudBackupModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupModule.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -105,12 +107,8 @@
 		13B07FAE1A68108700A75B9A /* BlirpMe */ = {
 			isa = PBXGroup;
 			children = (
-				90DA5A992E0323D10083C9CE /* CloudBackupModule.m */,
-				90DA5A9A2E0323D10083C9CE /* CloudBackupModule.swift */,
-				90DA5A9F2E0323D10083C9CE /* Delegates */,
-				90DA5AA12E0323D10083C9CE /* Errors */,
+				90DA5AB82E03429B0083C9CE /* CloudBackup */,
 				90DA5AA22E0323D10083C9CE /* Utils */,
-				90DA5A972E031C180083C9CE /* BlirpMe.entitlements */,
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
 				13B07FB01A68108700A75B9A /* AppDelegate.mm */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -143,7 +141,6 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				90DA5A962E031BF00083C9CE /* BlirpMe.entitlements */,
 				13B07FAE1A68108700A75B9A /* BlirpMe */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				00E356EF1AD99517003FC87E /* BlirpMeTests */,
@@ -165,30 +162,52 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		90DA5A9F2E0323D10083C9CE /* Delegates */ = {
-			isa = PBXGroup;
-			children = (
-				90DA5A9B2E0323D10083C9CE /* PasskeyAuthorizationDelegate.swift */,
-				90DA5A9C2E0323D10083C9CE /* PasskeyReadDataDelegate.swift */,
-				90DA5A9D2E0323D10083C9CE /* PasskeyRegistrationDelegate.swift */,
-				90DA5A9E2E0323D10083C9CE /* PasskeyWriteDataDelegate.swift */,
-			);
-			path = Delegates;
-			sourceTree = "<group>";
-		};
-		90DA5AA12E0323D10083C9CE /* Errors */ = {
-			isa = PBXGroup;
-			children = (
-				90DA5AA02E0323D10083C9CE /* CloudBackupError.swift */,
-			);
-			path = Errors;
-			sourceTree = "<group>";
-		};
 		90DA5AA22E0323D10083C9CE /* Utils */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = Utils;
+			sourceTree = "<group>";
+		};
+		90DA5AB02E03429B0083C9CE /* Delegates */ = {
+			isa = PBXGroup;
+			children = (
+				90DA5AAC2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift */,
+				90DA5AAD2E03429B0083C9CE /* PasskeyReadDataDelegate.swift */,
+				90DA5AAE2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift */,
+				90DA5AAF2E03429B0083C9CE /* PasskeyWriteDataDelegate.swift */,
+			);
+			path = Delegates;
+			sourceTree = "<group>";
+		};
+		90DA5AB22E03429B0083C9CE /* Errors */ = {
+			isa = PBXGroup;
+			children = (
+				90DA5AB12E03429B0083C9CE /* CloudBackupError.swift */,
+			);
+			path = Errors;
+			sourceTree = "<group>";
+		};
+		90DA5AB52E03429B0083C9CE /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				90DA5AB32E03429B0083C9CE /* ChallengeGenerator.swift */,
+				90DA5AB42E03429B0083C9CE /* DataConverter.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		90DA5AB82E03429B0083C9CE /* CloudBackup */ = {
+			isa = PBXGroup;
+			children = (
+				90DA5AB02E03429B0083C9CE /* Delegates */,
+				90DA5AB22E03429B0083C9CE /* Errors */,
+				90DA5AB52E03429B0083C9CE /* Utils */,
+				90DA5AB62E03429B0083C9CE /* CloudBackupModule.m */,
+				90DA5AB72E03429B0083C9CE /* CloudBackupModule.swift */,
+			);
+			name = CloudBackup;
+			path = BlirpMe/CloudBackup;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -463,13 +482,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				90DA5AA32E0323D10083C9CE /* PasskeyRegistrationDelegate.swift in Sources */,
-				90DA5AA42E0323D10083C9CE /* PasskeyAuthorizationDelegate.swift in Sources */,
-				90DA5AA52E0323D10083C9CE /* CloudBackupModule.swift in Sources */,
-				90DA5AA62E0323D10083C9CE /* CloudBackupModule.m in Sources */,
-				90DA5AA72E0323D10083C9CE /* CloudBackupError.swift in Sources */,
-				90DA5AA82E0323D10083C9CE /* PasskeyReadDataDelegate.swift in Sources */,
-				90DA5AA92E0323D10083C9CE /* PasskeyWriteDataDelegate.swift in Sources */,
+				90DA5AB92E03429B0083C9CE /* PasskeyReadDataDelegate.swift in Sources */,
+				90DA5ABA2E03429B0083C9CE /* CloudBackupError.swift in Sources */,
+				90DA5ABB2E03429B0083C9CE /* CloudBackupModule.m in Sources */,
+				90DA5ABC2E03429B0083C9CE /* ChallengeGenerator.swift in Sources */,
+				90DA5ABD2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift in Sources */,
+				90DA5ABE2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift in Sources */,
+				90DA5ABF2E03429B0083C9CE /* CloudBackupModule.swift in Sources */,
+				90DA5AC02E03429B0083C9CE /* PasskeyWriteDataDelegate.swift in Sources */,
+				90DA5AC12E03429B0083C9CE /* DataConverter.swift in Sources */,
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 			);
@@ -545,6 +566,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BlirpMe/BlirpMe.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -574,6 +596,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BlirpMe/BlirpMe.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -7,6 +7,7 @@
 
 import Foundation
 import AuthenticationServices
+import UIKit
 
 @available(iOS 17.0, *)
 class PasskeyAuthorizationDelegate: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
@@ -29,7 +30,11 @@ class PasskeyAuthorizationDelegate: NSObject, ASAuthorizationControllerDelegate,
     // MARK: - ASAuthorizationControllerPresentationContextProviding
     
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return ASPresentationAnchor()
+        guard let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) ?? 
+                          UIApplication.shared.windows.first else {
+            return ASPresentationAnchor()
+        }
+        return window
     }
     
     // MARK: - ASAuthorizationControllerDelegate

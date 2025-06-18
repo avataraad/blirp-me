@@ -7,7 +7,6 @@
 
 import Foundation
 
-@objc(CloudBackupError)
 public enum CloudBackupError: String, Error {
     case userCanceled = "user_canceled"
     case noCredentialsFound = "no_credentials_found"
