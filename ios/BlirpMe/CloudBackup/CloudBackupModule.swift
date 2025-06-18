@@ -65,14 +65,49 @@ class CloudBackupModule: NSObject {
         ]
     }
     
-    // MARK: - Registration (to be implemented in Issue #4)
+    // MARK: - Registration
     
     @objc
     func register(_ tag: String,
                   resolver: @escaping RCTPromiseResolveBlock,
                   rejecter: @escaping RCTPromiseRejectBlock) {
-        // TODO: Implement in Issue #4
-        rejecter("NOT_IMPLEMENTED", "Registration not yet implemented", nil)
+        
+        guard let tagData = tag.data(using: .utf8) else {
+            rejecter(CloudBackupError.dataConversionFailed.rawValue,
+                    "Failed to convert tag to data",
+                    nil)
+            return
+        }
+        
+        do {
+            let challenge = try ChallengeGenerator.generateChallenge()
+            
+            let delegate = PasskeyRegistrationDelegate(
+                relyingPartyIdentifier: relyingPartyIdentifier,
+                resolver: resolver,
+                rejecter: rejecter
+            )
+            self.registrationDelegate = delegate
+            
+            let registrationRequest = delegate.provider.createCredentialRegistrationRequest(
+                challenge: challenge,
+                name: tag,
+                userID: tagData
+            )
+            
+            // Enable large blob support
+            registrationRequest.largeBlob = ASAuthorizationPublicKeyCredentialLargeBlobRegistrationInput.supportRequired
+            
+            let controller = ASAuthorizationController(authorizationRequests: [registrationRequest])
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests(options: .preferImmediatelyAvailableCredentials)
+            
+        } catch {
+            rejecter(CloudBackupError.createChallengeFailed.rawValue,
+                    CloudBackupError.createChallengeFailed.localizedDescription,
+                    error)
+        }
     }
     
     // MARK: - Write Data (to be implemented in Issue #5)

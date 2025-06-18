@@ -13,9 +13,14 @@ class PasskeyRegistrationDelegate: PasskeyAuthorizationDelegate {
     
     override func authorizationController(controller: ASAuthorizationController, 
                                         didCompleteWithAuthorization authorization: ASAuthorization) {
-        // TODO: Implement in Issue #4
-        rejecter(CloudBackupError.failed.rawValue, 
-                "Registration delegate not yet implemented", 
-                nil)
+        guard let credential = authorization.credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration else {
+            rejecter(CloudBackupError.unexpectedCredentialType.rawValue, 
+                    CloudBackupError.unexpectedCredentialType.localizedDescription, 
+                    nil)
+            return
+        }
+        
+        let credentialID = credential.credentialID.base64EncodedString()
+        resolver(["credentialID": credentialID])
     }
 }
