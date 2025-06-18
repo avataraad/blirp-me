@@ -159,14 +159,50 @@ class CloudBackupModule: NSObject {
         }
     }
     
-    // MARK: - Read Data (to be implemented in Issue #6)
+    // MARK: - Read Data
     
     @objc
     func readData(_ credentialID: String?,
                   resolver: @escaping RCTPromiseResolveBlock,
                   rejecter: @escaping RCTPromiseRejectBlock) {
-        // TODO: Implement in Issue #6
-        rejecter("NOT_IMPLEMENTED", "Read data not yet implemented", nil)
+        
+        do {
+            let challenge = try ChallengeGenerator.generateChallenge()
+            
+            let delegate = PasskeyReadDataDelegate(
+                relyingPartyIdentifier: relyingPartyIdentifier,
+                resolver: resolver,
+                rejecter: rejecter
+            )
+            self.readDataDelegate = delegate
+            
+            let assertionRequest = delegate.provider.createCredentialAssertionRequest(
+                challenge: challenge
+            )
+            
+            // Set up large blob read
+            assertionRequest.largeBlob = ASAuthorizationPublicKeyCredentialLargeBlobAssertionInput.read
+            
+            // If credential ID provided, use specific credential
+            if let credentialID = credentialID {
+                let credentialIDData = try DataConverter.base64ToData(credentialID)
+                let descriptor = ASAuthorizationPlatformPublicKeyCredentialDescriptor(
+                    credentialID: credentialIDData
+                )
+                assertionRequest.allowedCredentials = [descriptor]
+            }
+            // Otherwise, show credential picker
+            
+            let controller = ASAuthorizationController(authorizationRequests: [assertionRequest])
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests(options: .preferImmediatelyAvailableCredentials)
+            
+        } catch {
+            rejecter(CloudBackupError.createChallengeFailed.rawValue,
+                    error.localizedDescription,
+                    error)
+        }
     }
     
     // MARK: - Metadata Storage (to be implemented in Issue #7)
