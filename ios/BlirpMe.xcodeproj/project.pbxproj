@@ -24,6 +24,7 @@
 		90DA5ABF2E03429B0083C9CE /* CloudBackupModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB72E03429B0083C9CE /* CloudBackupModule.swift */; };
 		90DA5AC02E03429B0083C9CE /* PasskeyWriteDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAF2E03429B0083C9CE /* PasskeyWriteDataDelegate.swift */; };
 		90DA5AC12E03429B0083C9CE /* DataConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB42E03429B0083C9CE /* DataConverter.swift */; };
+		90DA5AC32E0480450083C9CE /* CloudBackupModuleWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AC22E0480450083C9CE /* CloudBackupModuleWrapper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,7 @@
 		90DA5AB42E03429B0083C9CE /* DataConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataConverter.swift; sourceTree = "<group>"; };
 		90DA5AB62E03429B0083C9CE /* CloudBackupModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CloudBackupModule.m; sourceTree = "<group>"; };
 		90DA5AB72E03429B0083C9CE /* CloudBackupModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupModule.swift; sourceTree = "<group>"; };
+		90DA5AC22E0480450083C9CE /* CloudBackupModuleWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupModuleWrapper.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -200,6 +202,7 @@
 		90DA5AB82E03429B0083C9CE /* CloudBackup */ = {
 			isa = PBXGroup;
 			children = (
+				90DA5AC22E0480450083C9CE /* CloudBackupModuleWrapper.swift */,
 				90DA5AB02E03429B0083C9CE /* Delegates */,
 				90DA5AB22E03429B0083C9CE /* Errors */,
 				90DA5AB52E03429B0083C9CE /* Utils */,
@@ -483,6 +486,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				90DA5AB92E03429B0083C9CE /* PasskeyReadDataDelegate.swift in Sources */,
+				90DA5AC32E0480450083C9CE /* CloudBackupModuleWrapper.swift in Sources */,
 				90DA5ABA2E03429B0083C9CE /* CloudBackupError.swift in Sources */,
 				90DA5ABB2E03429B0083C9CE /* CloudBackupModule.m in Sources */,
 				90DA5ABC2E03429B0083C9CE /* ChallengeGenerator.swift in Sources */,

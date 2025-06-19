@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
 export interface CloudBackupCredential {
   credentialID: string;
@@ -97,7 +97,18 @@ export function isCloudBackupError(error: any): error is CloudBackupError {
 }
 
 export function isCloudBackupAvailable(): boolean {
-  return Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 17;
+  if (Platform.OS !== 'ios') {
+    return false;
+  }
+  
+  const iosVersion = parseInt(Platform.Version as string, 10);
+  if (iosVersion < 17) {
+    return false;
+  }
+  
+  // Check if native module is actually available
+  const CloudBackupModule = NativeModules.CloudBackupModule;
+  return !!CloudBackupModule;
 }
 
 // Branded type for credential IDs

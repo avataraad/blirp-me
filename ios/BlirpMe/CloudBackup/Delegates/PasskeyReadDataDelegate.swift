@@ -30,6 +30,12 @@ class PasskeyReadDataDelegate: PasskeyAuthorizationDelegate {
         }
         
         do {
+            guard let blobData = blobData else {
+                rejecter(CloudBackupError.noCredentialsFound.rawValue,
+                        "No backup data in credential",
+                        nil)
+                return
+            }
             let privateKey = try DataConverter.dataToString(blobData)
             
             // Check for deletion marker

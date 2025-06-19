@@ -8,7 +8,6 @@
 import Foundation
 import AuthenticationServices
 
-@objc(CloudBackupModule)
 @available(iOS 17.0, *)
 class CloudBackupModule: NSObject {
     

@@ -1,7 +1,11 @@
 import { NativeModules, Platform } from 'react-native';
 import type { CloudBackupModule, CloudBackupError } from './types';
 
-const { CloudBackup: NativeCloudBackup } = NativeModules;
+// Debug logging to see what modules are available
+console.log('Available Native Modules:', Object.keys(NativeModules));
+console.log('CloudBackupModule exists?', 'CloudBackupModule' in NativeModules);
+
+const NativeCloudBackup = NativeModules.CloudBackupModule;
 
 class CloudBackupImpl implements CloudBackupModule {
   private isSupported(): void {
