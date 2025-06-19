@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["25GGA9M3A7.org.reactjs.native.example.BlirpMe"],
+        "components": [
+          {
+            "/": "*",
+            "comment": "Universal links for the app"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["25GGA9M3A7.org.reactjs.native.example.BlirpMe"]
+  },
+  "appclips": {
+    "apps": []
+  }
+}

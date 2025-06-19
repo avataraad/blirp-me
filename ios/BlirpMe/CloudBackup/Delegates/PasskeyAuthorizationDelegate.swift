@@ -41,7 +41,20 @@ class PasskeyAuthorizationDelegate: NSObject, ASAuthorizationControllerDelegate,
     
     func authorizationController(controller: ASAuthorizationController, 
                                 didCompleteWithError error: Error) {
+        print("ASAuthorizationController error: \(error)")
+        print("Error domain: \((error as NSError).domain)")
+        print("Error code: \((error as NSError).code)")
+        print("Error userInfo: \((error as NSError).userInfo)")
+        
+        // Additional debugging for error 1004
+        if (error as NSError).code == 1004 {
+            print("Error 1004 detected - webcredentials association verification failed")
+            print("Ensure apple-app-site-association is accessible at https://blirp.me/.well-known/apple-app-site-association")
+            print("Current relying party identifier: \(self.provider.relyingPartyIdentifier)")
+        }
+        
         if let authError = error as? ASAuthorizationError {
+            print("ASAuthorizationError code raw value: \(authError.code.rawValue)")
             switch authError.code {
             case .canceled:
                 if authError.userInfo.isEmpty {
