@@ -74,7 +74,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       if (isCloudBackupAvailable()) {
         try {
           console.log('Creating cloud backup for wallet...');
-          await createBackup(`${tag} Wallet Backup`, privateKey);
+          // Remove 0x prefix from private key for cloud backup
+          const privateKeyForBackup = privateKey.replace(/^0x/i, '');
+          await createBackup(`${tag} Wallet Backup`, privateKeyForBackup);
           console.log('Cloud backup created successfully');
         } catch (error) {
           console.error('Cloud backup failed:', error);
@@ -180,8 +182,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         throw new Error('No backup data found');
       }
 
-      // Create wallet from backup
-      const wallet = new ethers.Wallet(backupData.privateKey);
+      // Create wallet from backup (add 0x prefix back)
+      const privateKeyWithPrefix = backupData.privateKey.startsWith('0x') 
+        ? backupData.privateKey 
+        : `0x${backupData.privateKey}`;
+      const wallet = new ethers.Wallet(privateKeyWithPrefix);
       
       // Generate mnemonic from private key (for local storage)
       // Note: This is a simplified approach - in production you might want to
