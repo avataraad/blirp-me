@@ -139,7 +139,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
                 <Text style={[
                   styles.transactionAmount,
-                  tx.type === 'received' && styles.transactionAmountReceived
+                  tx.type === 'received' && styles.transactionAmountReceived,
                 ]}>
                   {tx.type === 'received' ? '+' : '-'}{tx.amount} ETH
                 </Text>

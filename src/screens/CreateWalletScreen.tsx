@@ -36,7 +36,7 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
     // Remove @ if user types it, only allow alphanumeric and underscore
     const cleanedTag = text.replace(/[@\s]/g, '').toLowerCase();
     setTag(cleanedTag);
-    
+
     // Reset availability check
     if (cleanedTag.length >= 3) {
       setIsChecking(true);
@@ -57,10 +57,10 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
 
     // Create the actual wallet
     const success = await createWallet(tag);
-    
+
     if (success) {
       Alert.alert(
-        'Wallet Created!', 
+        'Wallet Created!',
         'Your wallet has been created and secured with your device biometrics.',
         [
           {
@@ -79,7 +79,7 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.content}
       >

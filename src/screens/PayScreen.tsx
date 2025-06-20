@@ -28,16 +28,16 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
-  
+
   // Mock balance - will be replaced with real data
   const balance = 0.1234;
   const balanceUSD = 234.56;
   const gasEstimate = 0.001;
-  const gasEstimateUSD = 1.90;
+  // const gasEstimateUSD = 1.90;
 
   const handleRecipientChange = (text: string) => {
     setRecipient(text);
-    
+
     // Simple validation for demo
     if (text.startsWith('@')) {
       setIsValidAddress(text.length > 3);
@@ -52,8 +52,8 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     // Only allow numbers and one decimal point
     const cleaned = text.replace(/[^0-9.]/g, '');
     const parts = cleaned.split('.');
-    if (parts.length > 2) return;
-    if (parts[1]?.length > 4) return; // Max 4 decimal places
+    if (parts.length > 2) {return;}
+    if (parts[1]?.length > 4) {return;} // Max 4 decimal places
     setAmount(cleaned);
   };
 
@@ -62,12 +62,12 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Invalid Recipient', 'Please enter a valid tag or Ethereum address.');
       return;
     }
-    
+
     if (!amount || parseFloat(amount) === 0) {
       Alert.alert('Invalid Amount', 'Please enter an amount to send.');
       return;
     }
-    
+
     if (parseFloat(amount) + gasEstimate > balance) {
       Alert.alert('Insufficient Balance', 'You don\'t have enough ETH to complete this transaction.');
       return;
@@ -170,7 +170,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.summaryTotalLabel}>Total</Text>
               <Text style={[
                 styles.summaryTotalValue,
-                isInsufficientBalance && styles.insufficientBalance
+                isInsufficientBalance && styles.insufficientBalance,
               ]}>
                 {totalAmount.toFixed(4)} ETH
               </Text>

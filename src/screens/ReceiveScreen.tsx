@@ -26,7 +26,7 @@ type Props = {
 
 const ReceiveScreen: React.FC<Props> = () => {
   const [displayMode, setDisplayMode] = useState<'address' | 'tag'>('tag');
-  
+
   // Mock data - will be replaced with real wallet data
   const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f6D842';
   const walletTag = '@johndoe';
@@ -63,7 +63,7 @@ const ReceiveScreen: React.FC<Props> = () => {
             color={theme.colors.text.primary}
           />
         </View>
-        
+
         {/* Toggle Buttons */}
         <View style={styles.toggleContainer}>
           <TouchableOpacity
@@ -115,7 +115,7 @@ const ReceiveScreen: React.FC<Props> = () => {
           <Icon name="copy-outline" size={24} color={theme.colors.primary} />
           <Text style={styles.actionButtonText}>Copy</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
           <Icon name="share-outline" size={24} color={theme.colors.primary} />
           <Text style={styles.actionButtonText}>Share</Text>

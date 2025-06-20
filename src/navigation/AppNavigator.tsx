@@ -21,24 +21,34 @@ console.log('Type:', typeof WelcomeScreen);
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+// Tab bar icon renderer
+const TabBarIcon = ({ route, focused, color, size }: {
+  route: { name: string };
+  focused: boolean;
+  color: string;
+  size: number;
+}) => {
+  let iconName: string = '';
+
+  if (route.name === 'Home') {
+    iconName = focused ? 'home' : 'home-outline';
+  } else if (route.name === 'Pay') {
+    iconName = focused ? 'send' : 'send-outline';
+  } else if (route.name === 'Receive') {
+    iconName = focused ? 'download' : 'download-outline';
+  }
+
+  return <Icon name={iconName} size={size} color={color} />;
+};
+
 // Main tab navigator for authenticated users
 const MainTabs = () => {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: string = '';
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Pay') {
-            iconName = focused ? 'send' : 'send-outline';
-          } else if (route.name === 'Receive') {
-            iconName = focused ? 'download' : 'download-outline';
-          }
-
-          return <Icon name={iconName} size={size} color={color} />;
-        },
+        tabBarIcon: ({ focused, color, size }) => (
+          <TabBarIcon route={route} focused={focused} color={color} size={size} />
+        ),
         tabBarActiveTintColor: '#007AFF',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
@@ -85,23 +95,23 @@ const AppNavigator = () => {
           headerBackButtonDisplayMode: 'minimal',
         }}
       >
-        <Stack.Screen 
-          name="Welcome" 
-          component={WelcomeScreen} 
+        <Stack.Screen
+          name="Welcome"
+          component={WelcomeScreen}
           options={{ headerShown: false }}
         />
-        <Stack.Screen 
-          name="CreateWallet" 
+        <Stack.Screen
+          name="CreateWallet"
           component={CreateWalletScreen}
           options={{ title: 'Create Wallet' }}
         />
-        <Stack.Screen 
-          name="SignIn" 
+        <Stack.Screen
+          name="SignIn"
           component={SignInScreen}
           options={{ title: 'Sign In' }}
         />
-        <Stack.Screen 
-          name="MainTabs" 
+        <Stack.Screen
+          name="MainTabs"
           component={MainTabs}
           options={{ headerShown: false }}
         />

@@ -1,0 +1,15 @@
+[[redirects]]
+  from = "/.well-known/apple-app-site-association"
+  to = "/apple-app-site-association"
+  status = 200
+  force = true
+  headers = {Content-Type = "application/json"}
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"
+    Access-Control-Allow-Origin = "*"

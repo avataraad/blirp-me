@@ -11,6 +11,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useWallet } from '../contexts/WalletContext';
+import { isCloudBackupAvailable } from '../modules/cloudBackup';
+import { restoreFromPasskey } from '../modules/cloudBackup/helpers';
 
 type SignInScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -22,19 +25,36 @@ type Props = {
 };
 
 const SignInScreen: React.FC<Props> = ({ navigation }) => {
-  const handleSignIn = () => {
-    // For now, just show an alert and navigate
-    // We'll implement actual passkey authentication later
-    Alert.alert(
-      'Sign In',
-      'Passkey authentication will be implemented here.',
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('MainTabs'),
-        },
-      ]
-    );
+  const { restoreFromCloudBackup } = useWallet();
+
+  const handleSignIn = async () => {
+    if (!isCloudBackupAvailable()) {
+      Alert.alert(
+        'Not Available',
+        'Cloud backup requires iOS 17.0 or later.',
+      );
+      return;
+    }
+
+    try {
+      // Get both private key and tag from passkey
+      const { tag, privateKey } = await restoreFromPasskey();
+
+      // Restore the wallet with the retrieved tag and private key
+      const success = await restoreFromCloudBackup(tag, privateKey);
+
+      if (success) {
+        navigation.navigate('MainTabs');
+      } else {
+        Alert.alert(
+          'Restore Failed',
+          'Could not restore wallet. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      Alert.alert('Error', 'Failed to sign in with passkey');
+    }
   };
 
   return (
