@@ -26,21 +26,37 @@ type Props = {
 };
 
 const ReceiveScreen: React.FC<Props> = () => {
-  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>('tag');
   const { walletAddress, walletTag } = useWallet();
+  
+  // Handle edge cases for wallet data
+  const hasTag = Boolean(walletTag && walletTag.trim());
+  const hasAddress = Boolean(walletAddress);
+  
+  // Set initial display mode based on available data
+  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>(
+    hasTag ? 'tag' : 'address'
+  );
 
-  // Use real wallet data from context
+  // Use real wallet data from context with defensive checks
   const address = walletAddress || '';
-  const tag = walletTag ? `@${walletTag}` : '';
+  const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
 
   const displayValue = displayMode === 'tag' ? tag : address;
 
   const handleCopy = () => {
+    if (!displayValue) {
+      Alert.alert('Error', 'No address to copy');
+      return;
+    }
     // In a real app, we'd use Clipboard API
     Alert.alert('Copied!', `${displayValue} copied to clipboard`);
   };
 
   const handleShare = async () => {
+    if (!displayValue) {
+      Alert.alert('Error', 'No address to share');
+      return;
+    }
     try {
       await Share.share({
         message: `Send crypto to my Blirp wallet: ${displayValue}`,
@@ -58,45 +74,53 @@ const ReceiveScreen: React.FC<Props> = () => {
       {/* QR Code Section */}
       <View style={styles.qrSection}>
         <View style={styles.qrContainer}>
-          <QRCode
-            value={displayMode === 'tag' ? tag : address}
-            size={200}
-            backgroundColor={theme.colors.background}
-            color={theme.colors.text.primary}
-          />
+          {hasAddress ? (
+            <QRCode
+              value={displayMode === 'tag' && hasTag ? tag : address}
+              size={200}
+              backgroundColor={theme.colors.background}
+              color={theme.colors.text.primary}
+            />
+          ) : (
+            <View style={styles.qrPlaceholder}>
+              <Text style={styles.qrPlaceholderText}>Loading...</Text>
+            </View>
+          )}
         </View>
 
-        {/* Toggle Buttons */}
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              displayMode === 'tag' && styles.toggleButtonActive,
-            ]}
-            onPress={() => setDisplayMode('tag')}
-          >
-            <Text style={[
-              styles.toggleButtonText,
-              displayMode === 'tag' && styles.toggleButtonTextActive,
-            ]}>
-              Tag
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              displayMode === 'address' && styles.toggleButtonActive,
-            ]}
-            onPress={() => setDisplayMode('address')}
-          >
-            <Text style={[
-              styles.toggleButtonText,
-              displayMode === 'address' && styles.toggleButtonTextActive,
-            ]}>
-              Address
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Toggle Buttons - Only show if user has both tag and address */}
+        {hasTag && hasAddress && (
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                displayMode === 'tag' && styles.toggleButtonActive,
+              ]}
+              onPress={() => setDisplayMode('tag')}
+            >
+              <Text style={[
+                styles.toggleButtonText,
+                displayMode === 'tag' && styles.toggleButtonTextActive,
+              ]}>
+                Tag
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                displayMode === 'address' && styles.toggleButtonActive,
+              ]}
+              onPress={() => setDisplayMode('address')}
+            >
+              <Text style={[
+                styles.toggleButtonText,
+                displayMode === 'address' && styles.toggleButtonTextActive,
+              ]}>
+                Address
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Address/Tag Display */}
@@ -106,7 +130,7 @@ const ReceiveScreen: React.FC<Props> = () => {
         </Text>
         <View style={styles.addressContainer}>
           <Text style={styles.addressText} numberOfLines={displayMode === 'address' ? 2 : 1}>
-            {displayValue}
+            {displayValue || (displayMode === 'tag' ? 'No tag set' : 'Loading address...')}
           </Text>
         </View>
       </View>
@@ -247,6 +271,16 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.text.secondary,
     fontWeight: '600',
+  },
+  qrPlaceholder: {
+    width: 200,
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrPlaceholderText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
   },
 });
 
