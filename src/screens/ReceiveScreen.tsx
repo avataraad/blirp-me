@@ -14,6 +14,7 @@ import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
 import QRCode from 'react-native-qrcode-svg';
+import { useWallet } from '../contexts/WalletContext';
 
 type ReceiveScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -26,12 +27,13 @@ type Props = {
 
 const ReceiveScreen: React.FC<Props> = () => {
   const [displayMode, setDisplayMode] = useState<'address' | 'tag'>('tag');
+  const { walletAddress, walletTag } = useWallet();
 
-  // Mock data - will be replaced with real wallet data
-  const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f6D842';
-  const walletTag = '@johndoe';
+  // Use real wallet data from context
+  const address = walletAddress || '';
+  const tag = walletTag ? `@${walletTag}` : '';
 
-  const displayValue = displayMode === 'tag' ? walletTag : walletAddress;
+  const displayValue = displayMode === 'tag' ? tag : address;
 
   const handleCopy = () => {
     // In a real app, we'd use Clipboard API
@@ -57,7 +59,7 @@ const ReceiveScreen: React.FC<Props> = () => {
       <View style={styles.qrSection}>
         <View style={styles.qrContainer}>
           <QRCode
-            value={displayMode === 'tag' ? walletTag : walletAddress}
+            value={displayMode === 'tag' ? tag : address}
             size={200}
             backgroundColor={theme.colors.background}
             color={theme.colors.text.primary}
