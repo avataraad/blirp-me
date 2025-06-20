@@ -72,8 +72,8 @@ const ReceiveScreen: React.FC<Props> = () => {
     try {
       // Create contextual share message based on display mode
       const shareMessage = displayMode === 'tag' && hasTag
-        ? `Send crypto to my BlirpMe wallet: ${displayValue}\n\nBlirpMe - Simple crypto payments`
-        : `Send ETH to my wallet:\n${displayValue}\n\nNetwork: Ethereum Mainnet\nOnly send ETH or ERC-20 tokens to this address.`;
+        ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
+        : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
       
       await Share.share({
         message: shareMessage,
