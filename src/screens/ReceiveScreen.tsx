@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Vibration,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
@@ -16,6 +17,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import QRCode from 'react-native-qrcode-svg';
 import { useWallet } from '../contexts/WalletContext';
 import Clipboard from '@react-native-clipboard/clipboard';
+import { HapticFeedback } from '../utils/haptics';
 
 type ReceiveScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -46,20 +48,24 @@ const ReceiveScreen: React.FC<Props> = () => {
 
   const handleCopy = async () => {
     if (!displayValue) {
+      HapticFeedback.notificationError();
       Alert.alert('Error', 'No address to copy');
       return;
     }
     
     try {
       await Clipboard.setString(displayValue);
+      HapticFeedback.impact();
       Alert.alert('Copied!', `${displayValue} copied to clipboard`);
     } catch (error) {
+      HapticFeedback.notificationError();
       Alert.alert('Error', 'Failed to copy to clipboard');
     }
   };
 
   const handleShare = async () => {
     if (!displayValue) {
+      HapticFeedback.notificationError();
       Alert.alert('Error', 'No address to share');
       return;
     }
@@ -72,7 +78,9 @@ const ReceiveScreen: React.FC<Props> = () => {
       await Share.share({
         message: shareMessage,
       });
+      HapticFeedback.impact();
     } catch (error) {
+      HapticFeedback.notificationError();
       Alert.alert('Error', 'Failed to share');
     }
   };
