@@ -573,6 +573,8 @@
 				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Blirp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -602,6 +604,8 @@
 				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Blirp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

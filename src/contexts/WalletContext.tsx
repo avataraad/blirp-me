@@ -13,7 +13,7 @@ interface WalletContextType {
   isLoading: boolean;
   createWallet: (tag: string) => Promise<boolean>;
   unlockWallet: (tag: string) => Promise<boolean>;
-  restoreFromCloudBackup: (tag: string) => Promise<boolean>;
+  restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
   signTransaction: (transaction: ethers.providers.TransactionRequest) => Promise<string>;
   logout: () => void;
@@ -115,10 +115,17 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // Decrypt seed
       const encryptedSeed = JSON.parse(encryptedSeedString);
       const encryptionKey = `${tag}_key`; // Simplified for now
-      const mnemonic = await walletService.decryptData(encryptedSeed, encryptionKey);
+      const seedOrPrivateKey = await walletService.decryptData(encryptedSeed, encryptionKey);
 
-      // Restore wallet
-      const wallet = await walletService.restoreWalletFromMnemonic(mnemonic);
+      // Restore wallet - check if it's a private key or mnemonic
+      let wallet;
+      if (seedOrPrivateKey.startsWith('0x') && seedOrPrivateKey.length === 66) {
+        // It's a private key (from cloud restore)
+        wallet = new ethers.Wallet(seedOrPrivateKey);
+      } else {
+        // It's a mnemonic (from original creation)
+        wallet = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
+      }
       
       setCurrentWallet(wallet);
       setWalletAddress(wallet.address);
@@ -167,42 +174,42 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   };
 
   // Restore wallet from cloud backup
-  const restoreFromCloudBackup = async (tag: string): Promise<boolean> => {
+  const restoreFromCloudBackup = async (tag: string, privateKey?: string): Promise<boolean> => {
     try {
       setIsLoading(true);
 
-      // Check if cloud backup is available
-      if (!isCloudBackupAvailable()) {
-        throw new Error('Cloud backup not available on this device');
-      }
+      let privateKeyToUse = privateKey;
 
-      // Read backup data from cloud
-      const backupData = await CloudBackup.readData();
-      if (!backupData.privateKey) {
-        throw new Error('No backup data found');
+      // If no private key provided, read from cloud
+      if (!privateKeyToUse) {
+        // Check if cloud backup is available
+        if (!isCloudBackupAvailable()) {
+          throw new Error('Cloud backup not available on this device');
+        }
+
+        // Read backup data from cloud
+        const backupData = await CloudBackup.readData();
+        if (!backupData.privateKey) {
+          throw new Error('No backup data found');
+        }
+        privateKeyToUse = backupData.privateKey;
       }
 
       // Create wallet from backup (add 0x prefix back)
-      const privateKeyWithPrefix = backupData.privateKey.startsWith('0x') 
-        ? backupData.privateKey 
-        : `0x${backupData.privateKey}`;
+      const privateKeyWithPrefix = privateKeyToUse.startsWith('0x') 
+        ? privateKeyToUse 
+        : `0x${privateKeyToUse}`;
       const wallet = new ethers.Wallet(privateKeyWithPrefix);
       
-      // Generate mnemonic from private key (for local storage)
-      // Note: This is a simplified approach - in production you might want to
-      // store the backup differently
-      const mnemonic = ethers.utils.entropyToMnemonic(
-        ethers.utils.arrayify(backupData.privateKey)
-      );
-
-      // Encrypt and store locally
+      // For restored wallets, we'll store the private key as the "seed"
+      // since we can't recover the original mnemonic
       const encryptionKey = `${tag}_key`;
-      const encryptedSeed = await walletService.encryptData(mnemonic, encryptionKey);
+      const encryptedPrivateKey = await walletService.encryptData(privateKeyWithPrefix, encryptionKey);
       
-      // Store encrypted seed
+      // Store encrypted private key (acting as seed for restored wallets)
       const stored = await walletService.storeEncryptedSeed(
         tag,
-        JSON.stringify(encryptedSeed)
+        JSON.stringify(encryptedPrivateKey)
       );
 
       if (!stored) {

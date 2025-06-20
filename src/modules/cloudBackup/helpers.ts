@@ -50,3 +50,29 @@ export async function deleteBackup(credentialID: string): Promise<void> {
   const updated = credentials.filter(c => c.credentialID !== credentialID);
   await CloudBackup.setKnownCredentials(updated.map(c => JSON.stringify(c)));
 }
+
+/**
+ * Restore wallet from passkey selection
+ * Returns both private key and tag
+ */
+export async function restoreFromPasskey(): Promise<{ privateKey: string; tag: string }> {
+  // Let user select passkey
+  const backupData = await CloudBackup.readData();
+  
+  if (!backupData.privateKey) {
+    throw new Error('No backup data found');
+  }
+  
+  // Find the tag from metadata
+  const credentials = await getParsedCredentials();
+  const credential = credentials.find(c => c.credentialID === backupData.credentialID);
+  
+  if (!credential) {
+    throw new Error('Could not find wallet tag for this backup');
+  }
+  
+  return {
+    privateKey: backupData.privateKey,
+    tag: credential.tag
+  };
+}
