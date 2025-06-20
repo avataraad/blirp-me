@@ -19,6 +19,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useWallet } from '../contexts/WalletContext';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { HapticFeedback } from '../utils/haptics';
+import Toast from '../components/Toast';
 
 type ReceiveScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -41,26 +42,55 @@ const ReceiveScreen: React.FC<Props> = () => {
     hasTag ? 'tag' : 'address'
   );
 
+  // Toast state
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    visible: false,
+    message: '',
+    type: 'success',
+  });
+
+  // Copy button animation state
+  const [copyButtonPressed, setCopyButtonPressed] = useState(false);
+
   // Use real wallet data from context with defensive checks
   const address = walletAddress || '';
   const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
 
   const displayValue = displayMode === 'tag' ? tag : address;
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ visible: true, message, type });
+  };
+
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, visible: false }));
+  };
+
   const handleCopy = async () => {
     if (!displayValue) {
       HapticFeedback.notificationError();
-      Alert.alert('Error', 'No address to copy');
+      showToast('No address to copy', 'error');
       return;
     }
+    
+    // Button press animation
+    setCopyButtonPressed(true);
+    setTimeout(() => setCopyButtonPressed(false), 150);
     
     try {
       await Clipboard.setString(displayValue);
       HapticFeedback.impact();
-      Alert.alert('Copied!', `${displayValue} copied to clipboard`);
+      const shortValue = displayValue.length > 20 
+        ? `${displayValue.slice(0, 10)}...${displayValue.slice(-8)}`
+        : displayValue;
+      showToast(`✓ Copied ${shortValue}`);
     } catch (error) {
       HapticFeedback.notificationError();
-      Alert.alert('Error', 'Failed to copy to clipboard');
+      showToast('Failed to copy to clipboard', 'error');
     }
   };
 
@@ -179,10 +209,17 @@ const ReceiveScreen: React.FC<Props> = () => {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.contentContainer}
+      >
       {/* QR Code Section */}
       <View style={styles.qrSection}>
         <View style={styles.qrContainer}>
@@ -260,9 +297,24 @@ const ReceiveScreen: React.FC<Props> = () => {
 
       {/* Action Buttons */}
       <View style={styles.actionSection}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
-          <Icon name="copy-outline" size={24} color={theme.colors.primary} />
-          <Text style={styles.actionButtonText}>Copy</Text>
+        <TouchableOpacity 
+          style={[
+            styles.actionButton,
+            copyButtonPressed && styles.actionButtonPressed
+          ]} 
+          onPress={handleCopy}
+        >
+          <Icon 
+            name={copyButtonPressed ? "checkmark-outline" : "copy-outline"} 
+            size={24} 
+            color={copyButtonPressed ? theme.colors.surface : theme.colors.primary} 
+          />
+          <Text style={[
+            styles.actionButtonText,
+            copyButtonPressed && styles.actionButtonTextPressed
+          ]}>
+            {copyButtonPressed ? 'Copied!' : 'Copy'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
@@ -283,7 +335,8 @@ const ReceiveScreen: React.FC<Props> = () => {
       <View style={styles.networkBadge}>
         <Text style={styles.networkBadgeText}>Ethereum Mainnet</Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -291,6 +344,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  flex: {
+    flex: 1,
   },
   contentContainer: {
     padding: theme.spacing.lg,
@@ -414,6 +470,13 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     textAlign: 'center',
     marginTop: theme.spacing.xs,
+  },
+  actionButtonPressed: {
+    backgroundColor: theme.colors.primary,
+    transform: [{ scale: 0.95 }],
+  },
+  actionButtonTextPressed: {
+    color: theme.colors.surface,
   },
 });
 
