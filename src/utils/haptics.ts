@@ -22,14 +22,14 @@ export const HapticFeedback = {
   // Light impact for successful actions (copy, toggle)
   impact: () => {
     if (Platform.OS === 'ios') {
-      // First try our custom module (requires rebuild)
+      // Use native haptic module for proper "bump" feedback
       if (NativeHapticFeedback) {
         NativeHapticFeedback.impact('light');
         return;
       }
       
-      // For now, disable vibration on iOS since you don't want it
-      // The native module will work after rebuild
+      // Fallback - the module isn't loaded yet
+      console.warn('HapticFeedback: Native module not found. Did you add the files to Xcode?');
       return;
     } else {
       // Android uses vibration
