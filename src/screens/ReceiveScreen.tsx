@@ -8,12 +8,18 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Vibration,
+  ActionSheetIOS,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
 import QRCode from 'react-native-qrcode-svg';
+import { useWallet } from '../contexts/WalletContext';
+import Clipboard from '@react-native-clipboard/clipboard';
+import { HapticFeedback } from '../utils/haptics';
+import Toast from '../components/Toast';
 
 type ReceiveScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -25,76 +31,245 @@ type Props = {
 };
 
 const ReceiveScreen: React.FC<Props> = () => {
-  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>('tag');
+  const { walletAddress, walletTag } = useWallet();
+  
+  // Handle edge cases for wallet data
+  const hasTag = Boolean(walletTag && walletTag.trim());
+  const hasAddress = Boolean(walletAddress);
+  
+  // Set initial display mode based on available data
+  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>(
+    hasTag ? 'tag' : 'address'
+  );
 
-  // Mock data - will be replaced with real wallet data
-  const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f6D842';
-  const walletTag = '@johndoe';
+  // Toast state
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({
+    visible: false,
+    message: '',
+    type: 'success',
+  });
 
-  const displayValue = displayMode === 'tag' ? walletTag : walletAddress;
+  // Copy button animation state
+  const [copyButtonPressed, setCopyButtonPressed] = useState(false);
 
-  const handleCopy = () => {
-    // In a real app, we'd use Clipboard API
-    Alert.alert('Copied!', `${displayValue} copied to clipboard`);
+  // Use real wallet data from context with defensive checks
+  const address = walletAddress || '';
+  const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
+
+  const displayValue = displayMode === 'tag' ? tag : address;
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ visible: true, message, type });
+  };
+
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleCopy = async () => {
+    if (!displayValue) {
+      HapticFeedback.notificationError();
+      showToast('No address to copy', 'error');
+      return;
+    }
+    
+    // Button press animation
+    setCopyButtonPressed(true);
+    setTimeout(() => setCopyButtonPressed(false), 150);
+    
+    try {
+      await Clipboard.setString(displayValue);
+      HapticFeedback.impact();
+      const shortValue = displayValue.length > 20 
+        ? `${displayValue.slice(0, 10)}...${displayValue.slice(-8)}`
+        : displayValue;
+      showToast(`✓ Copied ${shortValue}`);
+    } catch (error) {
+      HapticFeedback.notificationError();
+      showToast('Failed to copy to clipboard', 'error');
+    }
+  };
+
+  const shareAsText = async () => {
+    const shareMessage = displayMode === 'tag' && hasTag
+      ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
+      : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
+    
+    await Share.share({ message: shareMessage });
+  };
+
+  const shareAsPaymentLink = async () => {
+    // Create ethereum: URI for payment requests
+    const paymentUri = `ethereum:${address}`;
+    const message = displayMode === 'tag' && hasTag
+      ? `💎 Pay me using BlirpMe: ${displayValue}\n\nPayment Link: ${paymentUri}\n\nDownload BlirpMe: https://blirpme.com`
+      : `💰 ETH Payment Request\n\nAddress: ${displayValue}\nPayment Link: ${paymentUri}\n\n📱 Powered by BlirpMe`;
+    
+    await Share.share({ message });
+  };
+
+  const shareAddressOnly = async () => {
+    // Share just the address/tag without extra formatting
+    await Share.share({ message: displayValue });
   };
 
   const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Send crypto to my Blirp wallet: ${displayValue}`,
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to share');
+    if (!displayValue) {
+      HapticFeedback.notificationError();
+      Alert.alert('Error', 'No address to share');
+      return;
+    }
+
+    if (Platform.OS === 'ios') {
+      // iOS Action Sheet
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [
+            'Cancel',
+            '📄 Share as Text',
+            '🔗 Share Payment Link',
+            '📋 Share Address Only',
+          ],
+          cancelButtonIndex: 0,
+          title: 'Share Options',
+          message: 'Choose how you want to share your wallet information',
+        },
+        async (buttonIndex) => {
+          try {
+            switch (buttonIndex) {
+              case 1:
+                await shareAsText();
+                break;
+              case 2:
+                await shareAsPaymentLink();
+                break;
+              case 3:
+                await shareAddressOnly();
+                break;
+              default:
+                return;
+            }
+            HapticFeedback.impact();
+          } catch (error) {
+            HapticFeedback.notificationError();
+            Alert.alert('Error', 'Failed to share');
+          }
+        }
+      );
+    } else {
+      // Android - show Alert with options
+      Alert.alert(
+        'Share Options',
+        'Choose how you want to share your wallet information',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: '📄 Share as Text',
+            onPress: async () => {
+              try {
+                await shareAsText();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+          {
+            text: '🔗 Share Payment Link',
+            onPress: async () => {
+              try {
+                await shareAsPaymentLink();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+          {
+            text: '📋 Address Only',
+            onPress: async () => {
+              try {
+                await shareAddressOnly();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+        ]
+      );
     }
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.contentContainer}
+      >
       {/* QR Code Section */}
       <View style={styles.qrSection}>
         <View style={styles.qrContainer}>
-          <QRCode
-            value={displayMode === 'tag' ? walletTag : walletAddress}
-            size={200}
-            backgroundColor={theme.colors.background}
-            color={theme.colors.text.primary}
-          />
+          {hasAddress ? (
+            <QRCode
+              value={displayMode === 'tag' && hasTag ? tag : address}
+              size={200}
+              backgroundColor={theme.colors.background}
+              color={theme.colors.text.primary}
+            />
+          ) : (
+            <View style={styles.qrPlaceholder}>
+              <Text style={styles.qrPlaceholderText}>Loading...</Text>
+            </View>
+          )}
         </View>
 
-        {/* Toggle Buttons */}
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              displayMode === 'tag' && styles.toggleButtonActive,
-            ]}
-            onPress={() => setDisplayMode('tag')}
-          >
-            <Text style={[
-              styles.toggleButtonText,
-              displayMode === 'tag' && styles.toggleButtonTextActive,
-            ]}>
-              Tag
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              displayMode === 'address' && styles.toggleButtonActive,
-            ]}
-            onPress={() => setDisplayMode('address')}
-          >
-            <Text style={[
-              styles.toggleButtonText,
-              displayMode === 'address' && styles.toggleButtonTextActive,
-            ]}>
-              Address
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Toggle Buttons - Only show if user has both tag and address */}
+        {hasTag && hasAddress && (
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                displayMode === 'tag' && styles.toggleButtonActive,
+              ]}
+              onPress={() => setDisplayMode('tag')}
+            >
+              <Text style={[
+                styles.toggleButtonText,
+                displayMode === 'tag' && styles.toggleButtonTextActive,
+              ]}>
+                Tag
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                displayMode === 'address' && styles.toggleButtonActive,
+              ]}
+              onPress={() => setDisplayMode('address')}
+            >
+              <Text style={[
+                styles.toggleButtonText,
+                displayMode === 'address' && styles.toggleButtonTextActive,
+              ]}>
+                Address
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Address/Tag Display */}
@@ -103,17 +278,43 @@ const ReceiveScreen: React.FC<Props> = () => {
           {displayMode === 'tag' ? 'Your Tag' : 'Your Address'}
         </Text>
         <View style={styles.addressContainer}>
-          <Text style={styles.addressText} numberOfLines={displayMode === 'address' ? 2 : 1}>
-            {displayValue}
+          <Text 
+            style={[
+              styles.addressText,
+              !displayValue && styles.addressTextPlaceholder
+            ]} 
+            numberOfLines={displayMode === 'address' ? 2 : 1}
+          >
+            {displayValue || (displayMode === 'tag' ? 'No tag set' : 'Loading address...')}
           </Text>
         </View>
+        {displayMode === 'tag' && !hasTag && hasAddress && (
+          <Text style={styles.noTagHint}>
+            You haven't set a tag yet. Use your address to receive funds.
+          </Text>
+        )}
       </View>
 
       {/* Action Buttons */}
       <View style={styles.actionSection}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
-          <Icon name="copy-outline" size={24} color={theme.colors.primary} />
-          <Text style={styles.actionButtonText}>Copy</Text>
+        <TouchableOpacity 
+          style={[
+            styles.actionButton,
+            copyButtonPressed && styles.actionButtonPressed
+          ]} 
+          onPress={handleCopy}
+        >
+          <Icon 
+            name={copyButtonPressed ? "checkmark-outline" : "copy-outline"} 
+            size={24} 
+            color={copyButtonPressed ? theme.colors.surface : theme.colors.primary} 
+          />
+          <Text style={[
+            styles.actionButtonText,
+            copyButtonPressed && styles.actionButtonTextPressed
+          ]}>
+            {copyButtonPressed ? 'Copied!' : 'Copy'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
@@ -134,7 +335,8 @@ const ReceiveScreen: React.FC<Props> = () => {
       <View style={styles.networkBadge}>
         <Text style={styles.networkBadgeText}>Ethereum Mainnet</Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -142,6 +344,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  flex: {
+    flex: 1,
   },
   contentContainer: {
     padding: theme.spacing.lg,
@@ -245,6 +450,33 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.text.secondary,
     fontWeight: '600',
+  },
+  qrPlaceholder: {
+    width: 200,
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrPlaceholderText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+  },
+  addressTextPlaceholder: {
+    fontStyle: 'italic',
+    color: theme.colors.text.tertiary,
+  },
+  noTagHint: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
+  },
+  actionButtonPressed: {
+    backgroundColor: theme.colors.primary,
+    transform: [{ scale: 0.95 }],
+  },
+  actionButtonTextPressed: {
+    color: theme.colors.surface,
   },
 });
 

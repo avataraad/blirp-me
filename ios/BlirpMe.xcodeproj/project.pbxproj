@@ -15,6 +15,8 @@
 		5166DA62901429BD08553F5C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8C3504F2221B7B1BD26924DD /* PrivacyInfo.xcprivacy */; };
 		7699B88040F8A987B510C191 /* libPods-BlirpMe-BlirpMeTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 19F6CBCC0A4E27FBF8BF4A61 /* libPods-BlirpMe-BlirpMeTests.a */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		901DDC4C2E05ECA200355059 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901DDC4B2E05ECA200355059 /* HapticFeedback.swift */; };
+		901DDC4D2E05ECA200355059 /* HapticFeedback.m in Sources */ = {isa = PBXBuildFile; fileRef = 901DDC4A2E05ECA200355059 /* HapticFeedback.m */; };
 		90DA5AB92E03429B0083C9CE /* PasskeyReadDataDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AAD2E03429B0083C9CE /* PasskeyReadDataDelegate.swift */; };
 		90DA5ABA2E03429B0083C9CE /* CloudBackupError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB12E03429B0083C9CE /* CloudBackupError.swift */; };
 		90DA5ABB2E03429B0083C9CE /* CloudBackupModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 90DA5AB62E03429B0083C9CE /* CloudBackupModule.m */; };
@@ -56,6 +58,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = BlirpMe/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-BlirpMe-BlirpMeTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BlirpMe-BlirpMeTests.release.xcconfig"; path = "Target Support Files/Pods-BlirpMe-BlirpMeTests/Pods-BlirpMe-BlirpMeTests.release.xcconfig"; sourceTree = "<group>"; };
 		8C3504F2221B7B1BD26924DD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = BlirpMe/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		901DDC4A2E05ECA200355059 /* HapticFeedback.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = HapticFeedback.m; path = BlirpMe/HapticFeedback.m; sourceTree = "<group>"; };
+		901DDC4B2E05ECA200355059 /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HapticFeedback.swift; path = BlirpMe/HapticFeedback.swift; sourceTree = "<group>"; };
 		90DA5AAC2E03429B0083C9CE /* PasskeyAuthorizationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyAuthorizationDelegate.swift; sourceTree = "<group>"; };
 		90DA5AAD2E03429B0083C9CE /* PasskeyReadDataDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyReadDataDelegate.swift; sourceTree = "<group>"; };
 		90DA5AAE2E03429B0083C9CE /* PasskeyRegistrationDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyRegistrationDelegate.swift; sourceTree = "<group>"; };
@@ -109,6 +113,8 @@
 		13B07FAE1A68108700A75B9A /* BlirpMe */ = {
 			isa = PBXGroup;
 			children = (
+				901DDC4A2E05ECA200355059 /* HapticFeedback.m */,
+				901DDC4B2E05ECA200355059 /* HapticFeedback.swift */,
 				90DA5AB82E03429B0083C9CE /* CloudBackup */,
 				90DA5AA22E0323D10083C9CE /* Utils */,
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
@@ -486,6 +492,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				90DA5AB92E03429B0083C9CE /* PasskeyReadDataDelegate.swift in Sources */,
+				901DDC4C2E05ECA200355059 /* HapticFeedback.swift in Sources */,
+				901DDC4D2E05ECA200355059 /* HapticFeedback.m in Sources */,
 				90DA5AC32E0480450083C9CE /* CloudBackupModuleWrapper.swift in Sources */,
 				90DA5ABA2E03429B0083C9CE /* CloudBackupError.swift in Sources */,
 				90DA5ABB2E03429B0083C9CE /* CloudBackupModule.m in Sources */,
@@ -569,7 +577,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BlirpMe/BlirpMe.entitlements;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
@@ -601,7 +609,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BlirpMe/BlirpMe.entitlements;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 25GGA9M3A7;
 				INFOPLIST_FILE = BlirpMe/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Blirp;
