@@ -15,6 +15,7 @@ import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
 import QRCode from 'react-native-qrcode-svg';
 import { useWallet } from '../contexts/WalletContext';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 type ReceiveScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -43,13 +44,18 @@ const ReceiveScreen: React.FC<Props> = () => {
 
   const displayValue = displayMode === 'tag' ? tag : address;
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!displayValue) {
       Alert.alert('Error', 'No address to copy');
       return;
     }
-    // In a real app, we'd use Clipboard API
-    Alert.alert('Copied!', `${displayValue} copied to clipboard`);
+    
+    try {
+      await Clipboard.setString(displayValue);
+      Alert.alert('Copied!', `${displayValue} copied to clipboard`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to copy to clipboard');
+    }
   };
 
   const handleShare = async () => {
