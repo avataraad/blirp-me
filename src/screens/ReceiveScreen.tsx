@@ -58,8 +58,13 @@ const ReceiveScreen: React.FC<Props> = () => {
       return;
     }
     try {
+      // Create contextual share message based on display mode
+      const shareMessage = displayMode === 'tag' && hasTag
+        ? `Send crypto to my BlirpMe wallet: ${displayValue}\n\nBlirpMe - Simple crypto payments`
+        : `Send ETH to my wallet:\n${displayValue}\n\nNetwork: Ethereum Mainnet\nOnly send ETH or ERC-20 tokens to this address.`;
+      
       await Share.share({
-        message: `Send crypto to my Blirp wallet: ${displayValue}`,
+        message: shareMessage,
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to share');
@@ -129,10 +134,21 @@ const ReceiveScreen: React.FC<Props> = () => {
           {displayMode === 'tag' ? 'Your Tag' : 'Your Address'}
         </Text>
         <View style={styles.addressContainer}>
-          <Text style={styles.addressText} numberOfLines={displayMode === 'address' ? 2 : 1}>
+          <Text 
+            style={[
+              styles.addressText,
+              !displayValue && styles.addressTextPlaceholder
+            ]} 
+            numberOfLines={displayMode === 'address' ? 2 : 1}
+          >
             {displayValue || (displayMode === 'tag' ? 'No tag set' : 'Loading address...')}
           </Text>
         </View>
+        {displayMode === 'tag' && !hasTag && hasAddress && (
+          <Text style={styles.noTagHint}>
+            You haven't set a tag yet. Use your address to receive funds.
+          </Text>
+        )}
       </View>
 
       {/* Action Buttons */}
@@ -281,6 +297,16 @@ const styles = StyleSheet.create({
   qrPlaceholderText: {
     ...theme.typography.body,
     color: theme.colors.text.secondary,
+  },
+  addressTextPlaceholder: {
+    fontStyle: 'italic',
+    color: theme.colors.text.tertiary,
+  },
+  noTagHint: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
   },
 });
 
