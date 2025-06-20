@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   Vibration,
+  ActionSheetIOS,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
@@ -63,25 +64,117 @@ const ReceiveScreen: React.FC<Props> = () => {
     }
   };
 
+  const shareAsText = async () => {
+    const shareMessage = displayMode === 'tag' && hasTag
+      ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
+      : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
+    
+    await Share.share({ message: shareMessage });
+  };
+
+  const shareAsPaymentLink = async () => {
+    // Create ethereum: URI for payment requests
+    const paymentUri = `ethereum:${address}`;
+    const message = displayMode === 'tag' && hasTag
+      ? `💎 Pay me using BlirpMe: ${displayValue}\n\nPayment Link: ${paymentUri}\n\nDownload BlirpMe: https://blirpme.com`
+      : `💰 ETH Payment Request\n\nAddress: ${displayValue}\nPayment Link: ${paymentUri}\n\n📱 Powered by BlirpMe`;
+    
+    await Share.share({ message });
+  };
+
+  const shareAddressOnly = async () => {
+    // Share just the address/tag without extra formatting
+    await Share.share({ message: displayValue });
+  };
+
   const handleShare = async () => {
     if (!displayValue) {
       HapticFeedback.notificationError();
       Alert.alert('Error', 'No address to share');
       return;
     }
-    try {
-      // Create contextual share message based on display mode
-      const shareMessage = displayMode === 'tag' && hasTag
-        ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
-        : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
-      
-      await Share.share({
-        message: shareMessage,
-      });
-      HapticFeedback.impact();
-    } catch (error) {
-      HapticFeedback.notificationError();
-      Alert.alert('Error', 'Failed to share');
+
+    if (Platform.OS === 'ios') {
+      // iOS Action Sheet
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [
+            'Cancel',
+            '📄 Share as Text',
+            '🔗 Share Payment Link',
+            '📋 Share Address Only',
+          ],
+          cancelButtonIndex: 0,
+          title: 'Share Options',
+          message: 'Choose how you want to share your wallet information',
+        },
+        async (buttonIndex) => {
+          try {
+            switch (buttonIndex) {
+              case 1:
+                await shareAsText();
+                break;
+              case 2:
+                await shareAsPaymentLink();
+                break;
+              case 3:
+                await shareAddressOnly();
+                break;
+              default:
+                return;
+            }
+            HapticFeedback.impact();
+          } catch (error) {
+            HapticFeedback.notificationError();
+            Alert.alert('Error', 'Failed to share');
+          }
+        }
+      );
+    } else {
+      // Android - show Alert with options
+      Alert.alert(
+        'Share Options',
+        'Choose how you want to share your wallet information',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: '📄 Share as Text',
+            onPress: async () => {
+              try {
+                await shareAsText();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+          {
+            text: '🔗 Share Payment Link',
+            onPress: async () => {
+              try {
+                await shareAsPaymentLink();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+          {
+            text: '📋 Address Only',
+            onPress: async () => {
+              try {
+                await shareAddressOnly();
+                HapticFeedback.impact();
+              } catch (error) {
+                HapticFeedback.notificationError();
+                Alert.alert('Error', 'Failed to share');
+              }
+            },
+          },
+        ]
+      );
     }
   };
 
