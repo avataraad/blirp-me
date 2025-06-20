@@ -1,23 +1,27 @@
-import { Platform, Vibration } from 'react-native';
+import { Platform, Vibration, NativeModules } from 'react-native';
+
+// Get our custom haptic feedback module
+const { HapticFeedback: NativeHapticFeedback } = NativeModules;
 
 // Haptic feedback utilities
 export const HapticFeedback = {
   // Light impact for successful actions (copy, toggle)
   impact: () => {
-    if (Platform.OS === 'ios') {
-      // iOS uses a very short vibration for impact
-      Vibration.vibrate(1);
+    if (Platform.OS === 'ios' && NativeHapticFeedback) {
+      // Use iOS native haptic engine for a nice "bump"
+      // This creates the physical tap sensation, not a vibration
+      NativeHapticFeedback.impact('light');
     } else {
-      // Android uses a slightly longer vibration
+      // Android uses vibration
       Vibration.vibrate(10);
     }
   },
 
   // Error feedback for failed actions
   notificationError: () => {
-    if (Platform.OS === 'ios') {
-      // iOS pattern: short-pause-short
-      Vibration.vibrate([0, 10, 40, 10]);
+    if (Platform.OS === 'ios' && NativeHapticFeedback) {
+      // iOS notification error feedback - distinct "thud" feel
+      NativeHapticFeedback.notification('error');
     } else {
       // Android: slightly longer vibration
       Vibration.vibrate(50);
@@ -26,8 +30,9 @@ export const HapticFeedback = {
 
   // Selection feedback for button presses
   selection: () => {
-    if (Platform.OS === 'ios') {
-      Vibration.vibrate(1);
+    if (Platform.OS === 'ios' && NativeHapticFeedback) {
+      // iOS selection feedback - very subtle tick
+      NativeHapticFeedback.selection();
     } else {
       Vibration.vibrate(5);
     }
