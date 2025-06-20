@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ethers } from 'ethers';
 import walletService from '../services/walletService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
@@ -59,7 +59,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // In production, this should use a key derived from biometrics
       const encryptionKey = `${tag}_key`; // Simplified for now
       const encryptedSeed = await walletService.encryptData(mnemonic, encryptionKey);
-      
+
       // Store encrypted seed
       const stored = await walletService.storeEncryptedSeed(
         tag,
@@ -87,7 +87,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
       // Create wallet instance
       const wallet = new ethers.Wallet(privateKey);
-      
+
       setCurrentWallet(wallet);
       setWalletAddress(address);
       setWalletTag(tag);
@@ -126,7 +126,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         // It's a mnemonic (from original creation)
         wallet = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
       }
-      
+
       setCurrentWallet(wallet);
       setWalletAddress(wallet.address);
       setWalletTag(tag);
@@ -145,7 +145,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Refresh balance
   const refreshBalance = async () => {
-    if (!walletAddress) return;
+    if (!walletAddress) {return;}
 
     try {
       const balanceData = await walletService.getBalance(walletAddress);
@@ -196,16 +196,16 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       }
 
       // Create wallet from backup (add 0x prefix back)
-      const privateKeyWithPrefix = privateKeyToUse.startsWith('0x') 
-        ? privateKeyToUse 
+      const privateKeyWithPrefix = privateKeyToUse.startsWith('0x')
+        ? privateKeyToUse
         : `0x${privateKeyToUse}`;
       const wallet = new ethers.Wallet(privateKeyWithPrefix);
-      
+
       // For restored wallets, we'll store the private key as the "seed"
       // since we can't recover the original mnemonic
       const encryptionKey = `${tag}_key`;
       const encryptedPrivateKey = await walletService.encryptData(privateKeyWithPrefix, encryptionKey);
-      
+
       // Store encrypted private key (acting as seed for restored wallets)
       const stored = await walletService.storeEncryptedSeed(
         tag,

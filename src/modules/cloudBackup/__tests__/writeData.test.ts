@@ -4,7 +4,7 @@ import { CloudBackup } from '../index';
 // Mock the native module
 jest.mock('react-native', () => ({
   NativeModules: {
-    CloudBackup: {
+    CloudBackupModule: {
       writeData: jest.fn(),
     },
   },
@@ -24,13 +24,13 @@ describe('CloudBackup Write Operations', () => {
     const validPrivateKey = '0123456789abcdef'.repeat(4); // 64 hex chars
 
     it('should call native writeData with valid inputs', async () => {
-      (NativeModules.CloudBackup.writeData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.writeData as jest.Mock).mockResolvedValue({
         credentialID: validCredentialID,
       });
 
       const result = await CloudBackup.writeData(validCredentialID, validPrivateKey);
 
-      expect(NativeModules.CloudBackup.writeData).toHaveBeenCalledWith(
+      expect(NativeModules.CloudBackupModule.writeData).toHaveBeenCalledWith(
         validCredentialID,
         validPrivateKey
       );
@@ -48,21 +48,21 @@ describe('CloudBackup Write Operations', () => {
       for (const key of invalidKeys) {
         await expect(CloudBackup.writeData(validCredentialID, key))
           .rejects.toThrow('Private key must be 64 hexadecimal characters');
-        expect(NativeModules.CloudBackup.writeData).not.toHaveBeenCalled();
+        expect(NativeModules.CloudBackupModule.writeData).not.toHaveBeenCalled();
       }
     });
 
     it('should validate required parameters', async () => {
       await expect(CloudBackup.writeData('', validPrivateKey))
         .rejects.toThrow('Credential ID and private key are required');
-      
+
       await expect(CloudBackup.writeData(validCredentialID, ''))
         .rejects.toThrow('Credential ID and private key are required');
     });
 
     it('should handle write errors from native module', async () => {
       const error = new Error('Blob mutation failed');
-      (NativeModules.CloudBackup.writeData as jest.Mock).mockRejectedValue(error);
+      (NativeModules.CloudBackupModule.writeData as jest.Mock).mockRejectedValue(error);
 
       await expect(CloudBackup.writeData(validCredentialID, validPrivateKey))
         .rejects.toThrow('Blob mutation failed');

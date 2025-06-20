@@ -100,12 +100,12 @@ export function isCloudBackupAvailable(): boolean {
   if (Platform.OS !== 'ios') {
     return false;
   }
-  
+
   const iosVersion = parseInt(Platform.Version as string, 10);
   if (iosVersion < 17) {
     return false;
   }
-  
+
   // Check if native module is actually available
   const CloudBackupModule = NativeModules.CloudBackupModule;
   return !!CloudBackupModule;

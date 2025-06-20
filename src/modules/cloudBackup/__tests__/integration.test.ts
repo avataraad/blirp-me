@@ -5,7 +5,7 @@ import { createBackup, backupExists } from '../helpers';
 // Mock the native module
 jest.mock('react-native', () => ({
   NativeModules: {
-    CloudBackup: {
+    CloudBackupModule: {
       register: jest.fn(),
       writeData: jest.fn(),
       readData: jest.fn(),
@@ -30,17 +30,17 @@ describe('CloudBackup Integration Flow', () => {
 
     it('should complete register -> write -> read flow', async () => {
       // Mock successful registration
-      (NativeModules.CloudBackup.register as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.register as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
       });
 
       // Mock successful write
-      (NativeModules.CloudBackup.writeData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.writeData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
       });
 
       // Mock successful read
-      (NativeModules.CloudBackup.readData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
         privateKey: testPrivateKey,
       });
@@ -61,26 +61,26 @@ describe('CloudBackup Integration Flow', () => {
 
     it('should create backup using helper function', async () => {
       // Mock all operations
-      (NativeModules.CloudBackup.register as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.register as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
       });
-      (NativeModules.CloudBackup.writeData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.writeData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
       });
-      (NativeModules.CloudBackup.addKnownCredential as jest.Mock).mockResolvedValue(undefined);
+      (NativeModules.CloudBackupModule.addKnownCredential as jest.Mock).mockResolvedValue(undefined);
 
       // Use helper to create backup
       const credentialID = await createBackup(testTag, testPrivateKey);
-      
+
       expect(credentialID).toBe(mockCredentialID);
-      expect(NativeModules.CloudBackup.register).toHaveBeenCalledWith(testTag);
-      expect(NativeModules.CloudBackup.writeData).toHaveBeenCalledWith(mockCredentialID, testPrivateKey);
-      expect(NativeModules.CloudBackup.addKnownCredential).toHaveBeenCalled();
+      expect(NativeModules.CloudBackupModule.register).toHaveBeenCalledWith(testTag);
+      expect(NativeModules.CloudBackupModule.writeData).toHaveBeenCalledWith(mockCredentialID, testPrivateKey);
+      expect(NativeModules.CloudBackupModule.addKnownCredential).toHaveBeenCalled();
     });
 
     it('should check if backup exists', async () => {
       // Mock successful read
-      (NativeModules.CloudBackup.readData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
         privateKey: testPrivateKey,
       });
@@ -89,7 +89,7 @@ describe('CloudBackup Integration Flow', () => {
       expect(exists).toBe(true);
 
       // Mock failed read
-      (NativeModules.CloudBackup.readData as jest.Mock).mockRejectedValue(
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockRejectedValue(
         new Error('No backup found')
       );
 

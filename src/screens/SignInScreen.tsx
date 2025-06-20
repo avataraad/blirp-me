@@ -39,10 +39,10 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     try {
       // Get both private key and tag from passkey
       const { tag, privateKey } = await restoreFromPasskey();
-      
+
       // Restore the wallet with the retrieved tag and private key
       const success = await restoreFromCloudBackup(tag, privateKey);
-      
+
       if (success) {
         navigation.navigate('MainTabs');
       } else {

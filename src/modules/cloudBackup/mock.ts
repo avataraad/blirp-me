@@ -6,7 +6,7 @@ export const CloudBackupMock: CloudBackupModule = {
     return { credentialID: 'mock_credential_id_' + Date.now() };
   },
 
-  async writeData(credentialID: string, privateKey: string) {
+  async writeData(credentialID: string, _privateKey: string) {
     console.log('[CloudBackup Mock] writeData:', { credentialID, privateKey: '***' });
     return { credentialID };
   },

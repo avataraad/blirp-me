@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
-import { 
-  isCloudBackupError, 
-  isCloudBackupAvailable, 
+import {
+  isCloudBackupError,
+  isCloudBackupAvailable,
   toCredentialID,
-  CloudBackupError 
+  CloudBackupError,
 } from '../types';
 
 describe('CloudBackup Type Guards', () => {
@@ -15,7 +15,7 @@ describe('CloudBackup Type Guards', () => {
         { code: CloudBackupError.FAILED },
         { code: CloudBackupError.BLOB_MUTATION_FAILED },
       ];
-      
+
       validErrors.forEach(error => {
         expect(isCloudBackupError(error)).toBe(true);
       });
@@ -30,7 +30,7 @@ describe('CloudBackup Type Guards', () => {
         undefined,
         'string error',
       ];
-      
+
       invalidErrors.forEach(error => {
         expect(isCloudBackupError(error)).toBe(false);
       });
@@ -56,10 +56,10 @@ describe('CloudBackup Type Guards', () => {
       (Platform as any).OS = 'ios';
       (Platform as any).Version = '17.0';
       expect(isCloudBackupAvailable()).toBe(true);
-      
+
       (Platform as any).Version = '18.0';
       expect(isCloudBackupAvailable()).toBe(true);
-      
+
       (Platform as any).Version = '17.1.2';
       expect(isCloudBackupAvailable()).toBe(true);
     });
@@ -68,7 +68,7 @@ describe('CloudBackup Type Guards', () => {
       (Platform as any).OS = 'ios';
       (Platform as any).Version = '16.0';
       expect(isCloudBackupAvailable()).toBe(false);
-      
+
       (Platform as any).Version = '15.5';
       expect(isCloudBackupAvailable()).toBe(false);
     });
@@ -77,7 +77,7 @@ describe('CloudBackup Type Guards', () => {
       (Platform as any).OS = 'android';
       (Platform as any).Version = '13';
       expect(isCloudBackupAvailable()).toBe(false);
-      
+
       (Platform as any).OS = 'web';
       expect(isCloudBackupAvailable()).toBe(false);
     });
@@ -87,7 +87,7 @@ describe('CloudBackup Type Guards', () => {
     it('should create branded CredentialID type', () => {
       const id = 'test_credential_id';
       const branded = toCredentialID(id);
-      
+
       // Runtime value should be the same
       expect(branded).toBe(id);
       expect(typeof branded).toBe('string');

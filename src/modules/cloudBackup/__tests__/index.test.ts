@@ -4,14 +4,14 @@ import { CloudBackup } from '../index';
 // Mock NativeModules
 jest.mock('react-native', () => ({
   NativeModules: {
-    CloudBackup: {
-      register: jest.fn().mockImplementation((tag: string) => 
+    CloudBackupModule: {
+      register: jest.fn().mockImplementation((_tag: string) =>
         Promise.resolve({ credentialID: 'mock_credential_id_' + Date.now() })
       ),
-      writeData: jest.fn().mockImplementation((credentialID: string) => 
+      writeData: jest.fn().mockImplementation((credentialID: string) =>
         Promise.resolve({ credentialID })
       ),
-      readData: jest.fn().mockImplementation((credentialID?: string) => 
+      readData: jest.fn().mockImplementation((credentialID?: string) =>
         Promise.resolve({
           credentialID: credentialID || 'mock_credential_id',
           privateKey: '0'.repeat(64),
@@ -56,7 +56,7 @@ describe('CloudBackup', () => {
     it('should write data with valid inputs', async () => {
       const credentialID = 'test_credential';
       const privateKey = '0'.repeat(64);
-      
+
       const result = await CloudBackup.writeData(credentialID, privateKey);
       expect(result.credentialID).toBe(credentialID);
     });
@@ -69,7 +69,7 @@ describe('CloudBackup', () => {
         '0'.repeat(65), // Too long
         'G'.repeat(64), // Invalid hex char
       ];
-      
+
       for (const key of invalidKeys) {
         await expect(CloudBackup.writeData(credentialID, key))
           .rejects.toThrow('Private key must be 64 hexadecimal characters');
@@ -79,7 +79,7 @@ describe('CloudBackup', () => {
     it('should throw on missing parameters', async () => {
       await expect(CloudBackup.writeData('', '0'.repeat(64)))
         .rejects.toThrow('Credential ID and private key are required');
-      
+
       await expect(CloudBackup.writeData('test', ''))
         .rejects.toThrow('Credential ID and private key are required');
     });
@@ -91,7 +91,7 @@ describe('CloudBackup', () => {
         'ABCDEF0123456789'.repeat(4),
         'aAbBcCdDeEfF0123456789'.repeat(2) + 'aAbBcCdDeEfF01234567',
       ];
-      
+
       for (const key of validKeys) {
         const result = await CloudBackup.writeData(credentialID, key);
         expect(result.credentialID).toBe(credentialID);
@@ -117,7 +117,7 @@ describe('CloudBackup', () => {
       // Both should work - implementation converts undefined to null
       const result1 = await CloudBackup.readData(undefined);
       expect(result1).toHaveProperty('credentialID');
-      
+
       const result2 = await CloudBackup.readData();
       expect(result2).toHaveProperty('credentialID');
     });
@@ -133,11 +133,11 @@ describe('CloudBackup', () => {
 
       // Add credential
       await CloudBackup.addKnownCredential(testCredential);
-      
+
       // Get credentials
       const credentials = await CloudBackup.getKnownCredentials();
       expect(Array.isArray(credentials)).toBe(true);
-      
+
       // Set credentials
       await CloudBackup.setKnownCredentials([testCredential]);
     });
@@ -156,7 +156,7 @@ describe('CloudBackup', () => {
   describe('platform checks', () => {
     it('should throw on unsupported platform', async () => {
       (Platform as any).OS = 'android';
-      
+
       await expect(CloudBackup.register('Test'))
         .rejects.toThrow('CloudBackup is only available on iOS');
     });
@@ -164,7 +164,7 @@ describe('CloudBackup', () => {
     it('should throw on old iOS version', async () => {
       (Platform as any).OS = 'ios';
       (Platform as any).Version = '16.0';
-      
+
       await expect(CloudBackup.register('Test'))
         .rejects.toThrow('CloudBackup requires iOS 17.0 or later');
     });
@@ -172,7 +172,7 @@ describe('CloudBackup', () => {
     it('should handle iOS version strings correctly', async () => {
       (Platform as any).OS = 'ios';
       (Platform as any).Version = '17.1.2';
-      
+
       // Should parse major version correctly
       const result = await CloudBackup.register('Test');
       expect(result).toHaveProperty('credentialID');
@@ -185,8 +185,8 @@ describe('CloudBackup', () => {
       // Since the module checks for NativeModules.CloudBackup during import,
       // we can't easily test this without module reloading
       // For now, we'll verify the mock exists
-      expect(NativeModules.CloudBackup).toBeDefined();
-      expect(typeof NativeModules.CloudBackup.register).toBe('function');
+      expect(NativeModules.CloudBackupModule).toBeDefined();
+      expect(typeof NativeModules.CloudBackupModule.register).toBe('function');
     });
   });
 });

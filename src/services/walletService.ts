@@ -5,7 +5,7 @@ import { MMKV } from 'react-native-mmkv';
 // Initialize MMKV for secure storage
 const storage = new MMKV({
   id: 'blirp-wallet-storage',
-  encryptionKey: 'blirp-encryption-key' // In production, generate this dynamically
+  encryptionKey: 'blirp-encryption-key', // In production, generate this dynamically
 });
 
 // Types
@@ -30,7 +30,7 @@ class WalletService {
     try {
       // Generate random wallet
       const wallet = ethers.Wallet.createRandom();
-      
+
       return {
         mnemonic: wallet.mnemonic!.phrase,
         address: wallet.address,
@@ -111,38 +111,33 @@ class WalletService {
   }
 
 // Encrypt data (simplified - in production use proper encryption)
-async encryptData(data: string, key: string): Promise<EncryptedSeed> {
+async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
     // For now, we'll use a simple base64 encoding
     // React Native doesn't have Buffer, use btoa instead
     const ciphertext = btoa(data);
     const iv = btoa(Math.random().toString());
-    
+
     return { ciphertext, iv };
   }
 
   // Decrypt data
-  async decryptData(encryptedData: EncryptedSeed, key: string): Promise<string> {
+  async decryptData(encryptedData: EncryptedSeed, _key: string): Promise<string> {
     // For now, simple base64 decoding
     // Use atob instead of Buffer
     return atob(encryptedData.ciphertext);
   }
 
   // Get balance from blockchain
-  async getBalance(address: string): Promise<{
+  async getBalance(_address: string): Promise<{
     balance: string;
     balanceInUSD: number;
   }> {
-    try {
-      // For now, return mock data
-      // In production, connect to Ethereum node
-      return {
-        balance: '0.0000',
-        balanceInUSD: 0.00,
-      };
-    } catch (error) {
-      console.error('Error getting balance:', error);
-      throw error;
-    }
+    // For now, return mock data
+    // In production, connect to Ethereum node
+    return {
+      balance: '0.0000',
+      balanceInUSD: 0.00,
+    };
   }
 
   // Check if tag is available

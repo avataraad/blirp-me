@@ -7,13 +7,13 @@ import type { CredentialMetadata } from './types';
 export async function createBackup(tag: string, privateKey: string): Promise<string> {
   const { credentialID } = await CloudBackup.register(tag);
   await CloudBackup.writeData(credentialID, privateKey);
-  
+
   const metadata: CredentialMetadata = {
     credentialID,
     tag,
     createdAt: new Date().toISOString(),
   };
-  
+
   await CloudBackup.addKnownCredential(JSON.stringify(metadata));
   return credentialID;
 }
@@ -44,7 +44,7 @@ export async function backupExists(credentialID: string): Promise<boolean> {
 export async function deleteBackup(credentialID: string): Promise<void> {
   // Write special deletion marker
   await CloudBackup.writeData(credentialID, 'DELETED');
-  
+
   // Update metadata to mark as deleted
   const credentials = await getParsedCredentials();
   const updated = credentials.filter(c => c.credentialID !== credentialID);
@@ -58,21 +58,21 @@ export async function deleteBackup(credentialID: string): Promise<void> {
 export async function restoreFromPasskey(): Promise<{ privateKey: string; tag: string }> {
   // Let user select passkey
   const backupData = await CloudBackup.readData();
-  
+
   if (!backupData.privateKey) {
     throw new Error('No backup data found');
   }
-  
+
   // Find the tag from metadata
   const credentials = await getParsedCredentials();
   const credential = credentials.find(c => c.credentialID === backupData.credentialID);
-  
+
   if (!credential) {
     throw new Error('Could not find wallet tag for this backup');
   }
-  
+
   return {
     privateKey: backupData.privateKey,
-    tag: credential.tag
+    tag: credential.tag,
   };
 }

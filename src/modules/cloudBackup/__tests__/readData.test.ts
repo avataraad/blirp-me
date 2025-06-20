@@ -4,7 +4,7 @@ import { CloudBackup } from '../index';
 // Mock the native module
 jest.mock('react-native', () => ({
   NativeModules: {
-    CloudBackup: {
+    CloudBackupModule: {
       readData: jest.fn(),
     },
   },
@@ -24,14 +24,14 @@ describe('CloudBackup Read Operations', () => {
     const mockPrivateKey = '0123456789abcdef'.repeat(4);
 
     it('should read data with specific credential ID', async () => {
-      (NativeModules.CloudBackup.readData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
         privateKey: mockPrivateKey,
       });
 
       const result = await CloudBackup.readData(mockCredentialID);
 
-      expect(NativeModules.CloudBackup.readData).toHaveBeenCalledWith(mockCredentialID);
+      expect(NativeModules.CloudBackupModule.readData).toHaveBeenCalledWith(mockCredentialID);
       expect(result).toEqual({
         credentialID: mockCredentialID,
         privateKey: mockPrivateKey,
@@ -40,20 +40,20 @@ describe('CloudBackup Read Operations', () => {
 
     it('should show credential picker when no ID provided', async () => {
       const pickerCredentialID = 'picker_selected_id';
-      (NativeModules.CloudBackup.readData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockResolvedValue({
         credentialID: pickerCredentialID,
         privateKey: mockPrivateKey,
       });
 
       const result = await CloudBackup.readData();
 
-      expect(NativeModules.CloudBackup.readData).toHaveBeenCalledWith(null);
+      expect(NativeModules.CloudBackupModule.readData).toHaveBeenCalledWith(null);
       expect(result.credentialID).toBe(pickerCredentialID);
       expect(result.privateKey).toBe(mockPrivateKey);
     });
 
     it('should handle undefined credential ID correctly', async () => {
-      (NativeModules.CloudBackup.readData as jest.Mock).mockResolvedValue({
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockResolvedValue({
         credentialID: mockCredentialID,
         privateKey: mockPrivateKey,
       });
@@ -61,12 +61,12 @@ describe('CloudBackup Read Operations', () => {
       await CloudBackup.readData(undefined);
 
       // Should convert undefined to null for native module
-      expect(NativeModules.CloudBackup.readData).toHaveBeenCalledWith(null);
+      expect(NativeModules.CloudBackupModule.readData).toHaveBeenCalledWith(null);
     });
 
     it('should handle read errors', async () => {
       const error = new Error('No backup data found');
-      (NativeModules.CloudBackup.readData as jest.Mock).mockRejectedValue(error);
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockRejectedValue(error);
 
       await expect(CloudBackup.readData(mockCredentialID))
         .rejects.toThrow('No backup data found');
@@ -74,7 +74,7 @@ describe('CloudBackup Read Operations', () => {
 
     it('should handle deletion marker', async () => {
       const error = new Error('Backup has been deleted');
-      (NativeModules.CloudBackup.readData as jest.Mock).mockRejectedValue(error);
+      (NativeModules.CloudBackupModule.readData as jest.Mock).mockRejectedValue(error);
 
       await expect(CloudBackup.readData(mockCredentialID))
         .rejects.toThrow('Backup has been deleted');
