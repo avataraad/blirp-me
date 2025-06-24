@@ -106,7 +106,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <Image 
-          source={require('../../assets/images/blirp-logo.png')} 
+          source={require('../../assets/images/blirp_logo.png')} 
           style={styles.blirpLogo}
           resizeMode="contain"
         />

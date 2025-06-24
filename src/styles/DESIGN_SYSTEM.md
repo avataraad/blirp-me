@@ -15,7 +15,7 @@ Blirp's design system embraces clarity through simplicity. We believe that a pow
 ## 🎯 Color System
 
 ### Primary Accent Color
-- **Mint Green**: `#32D74B` - Used sparingly for important actions, success states, and positive indicators
+- **Blirp Green**: `#7DD88C` - Used sparingly for important actions, success states, and positive indicators
 
 ### Text Colors
 - **Primary**: `#000000` (100% opacity) - Headings and important text
@@ -23,7 +23,7 @@ Blirp's design system embraces clarity through simplicity. We believe that a pow
 - **Caption**: `#C7C7CC` (50% opacity) - Metadata and disabled states
 
 ### Usage Guidelines
-- Use mint green for primary CTAs and positive financial indicators
+- Use Blirp green for primary CTAs and positive financial indicators
 - Reserve for success states and confirmation actions
 - Avoid using for large background elements
 
@@ -81,7 +81,7 @@ All spacing follows multiples of 8px for visual harmony and consistency:
 ```typescript
 // Primary CTA
 primary: {
-  backgroundColor: '#32D74B',
+  backgroundColor: '#7DD88C',
   height: 56px,
   borderRadius: 28px, // Full pill shape
   color: '#FFFFFF'
@@ -146,12 +146,12 @@ Bitcoin // Body text, asset identification
 BTC // Caption, symbol
 
 // Change indicators
-+2.43% // Mint green for positive
++2.43% // Blirp green for positive
 -1.23% // Error red for negative
 ```
 
 ### State Indicators
-- **Success**: Mint green (#32D74B) with checkmark
+- **Success**: Blirp green (#7DD88C) with checkmark
 - **Error**: Error red (#FF3B30) with X or warning
 - **Pending**: System gray with loading indicator
 
@@ -167,7 +167,7 @@ import { colors, typography, spacing } from '../styles/designSystem';
 
 // Or reference design system directly
 <View style={{ 
-  backgroundColor: colors.primary.mint,
+  backgroundColor: colors.primary.green,
   padding: spacing.card.padding.top 
 }} />
 ```

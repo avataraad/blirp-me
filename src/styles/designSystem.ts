@@ -8,8 +8,8 @@
 export const colors = {
   // Primary Accent Color
   primary: {
-    mint: '#32D74B', // Primary accent color
-    mintHex: '#32D74B',
+    green: '#7DD88C', // Primary accent color
+    greenHex: '#7DD88C',
   },
   
   // Text & Icon Colors
@@ -45,9 +45,9 @@ export const colors = {
   // Usage Examples
   usage: {
     ethereum: '#2456D9', // Used for Ethereum-related elements
-    positiveChange: '#32D74B', // +2.43% positive change
+    positiveChange: '#7DD88C', // +2.43% positive change
     negativeChange: '#FF3B30', // -1.23% negative change
-    confirmed: '#32D74B', // Success states
+    confirmed: '#7DD88C', // Success states
     failed: '#FF3B30', // Transaction failed states
   },
 };
@@ -145,7 +145,7 @@ export const spacing = {
 // Button Styles
 export const buttons = {
   primary: {
-    backgroundColor: colors.primary.mint,
+    backgroundColor: colors.primary.green,
     color: colors.background.white,
     height: 56,
     borderRadius: 28,

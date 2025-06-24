@@ -1,8 +1,8 @@
 export const theme = {
     colors: {
-      primary: '#32D74B', // Blirp Mint Green from design system
+      primary: '#7DD88C', // Updated Blirp Green from design system
       secondary: '#D1D1D6', // System Gray
-      success: '#32D74B', // Same as primary mint
+      success: '#7DD88C', // Same as primary green
       danger: '#FF3B30', // Error Red from design system
       warning: '#FF9500',
       background: '#FFFFFF', // Pure White
