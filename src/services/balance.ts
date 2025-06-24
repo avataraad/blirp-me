@@ -1,7 +1,8 @@
 import axios from 'axios';
+import Config from 'react-native-config';
 
 // Moralis API configuration
-const MORALIS_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjUwN2ZlZjk3LWE2ZTYtNDlmNy05ZjZmLTNiMzQ2YWE5NDJlMSIsIm9yZ0lkIjoiNDE2MDA3IiwidXNlcklkIjoiNDI3NTY1IiwidHlwZUlkIjoiMTYyN2MzNjktYWI0OC00YTE1LTlhODQtOTBjZGFlNzE5NmE2IiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3MzE1MjIzMDksImV4cCI6NDg4NzI4MjMwOX0.KPbp4QOy8JOuJGItQV2bRbEtz8N2bSpAQ0VOQJUZYy4';
+const MORALIS_API_KEY = Config.MORALIS_API_KEY;
 const MORALIS_BASE_URL = 'https://deep-index.moralis.io/api/v2.2';
 
 export interface TokenBalance {

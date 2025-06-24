@@ -1,8 +1,9 @@
 import { ethers } from 'ethers';
+import Config from 'react-native-config';
 
 // Ethereum mainnet configuration
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
-const ETHEREUM_RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/mB1Ta26zgZstYhvjY5Dgd';
+const ETHEREUM_RPC_URL = Config.ALCHEMY_RPC_URL;
 
 // Provider instance (singleton)
 let provider: ethers.providers.JsonRpcProvider | null = null;
