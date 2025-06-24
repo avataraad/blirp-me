@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,19 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useWallet } from '../contexts/WalletContext';
+import {
+  getWalletBalances,
+  getEthBalance,
+  formatTokenBalance,
+  WalletBalanceResponse,
+} from '../services/balance';
 
 type HomeScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -22,35 +30,51 @@ type Props = {
 };
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
-  const [refreshing, setRefreshing] = React.useState(false);
+  const { walletAddress } = useWallet();
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [balanceData, setBalanceData] = useState<WalletBalanceResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => {
+  // Fetch balances
+  const fetchBalances = useCallback(async () => {
+    if (!walletAddress) {
+      setError('No wallet address available');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setError(null);
+      const response = await getWalletBalances(walletAddress);
+      setBalanceData(response);
+    } catch (err) {
+      console.error('Failed to fetch balances:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch balances');
+    } finally {
+      setLoading(false);
       setRefreshing(false);
-    }, 1000);
-  }, []);
+    }
+  }, [walletAddress]);
 
-  // Mock data - will be replaced with real data
-  const balance = '0.0000';
-  const balanceUSD = '$0.00';
-  const transactions = [
-    {
-      id: '1',
-      type: 'received',
-      amount: '0.05',
-      from: '@alice',
-      date: '2 hours ago',
-    },
-    {
-      id: '2',
-      type: 'sent',
-      amount: '0.02',
-      to: '@bob',
-      date: '1 day ago',
-    },
-  ];
+  // Fetch on mount and when address changes
+  useEffect(() => {
+    fetchBalances();
+  }, [fetchBalances]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchBalances();
+  }, [fetchBalances]);
+
+  // Get ETH balance for display
+  const ethToken = balanceData ? getEthBalance(balanceData.tokens) : null;
+  const ethBalance = ethToken ? formatTokenBalance(ethToken.balance_formatted, ethToken.usd_value) : '0.0000';
+  const totalUsdValue = balanceData?.total_usd_value || 0;
+  const formattedUsdValue = `$${totalUsdValue.toFixed(2)}`;
+
+  // Mock transactions for now
+  const transactions = [];
 
   return (
     <ScrollView
@@ -63,8 +87,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       {/* Balance Card */}
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Total Balance</Text>
-        <Text style={styles.balanceAmount}>{balance} ETH</Text>
-        <Text style={styles.balanceUSD}>{balanceUSD}</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color={theme.colors.text.inverse} style={styles.loader} />
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : (
+          <>
+            <Text style={styles.balanceAmount}>{ethBalance} ETH</Text>
+            <Text style={styles.balanceUSD}>{formattedUsdValue}</Text>
+          </>
+        )}
       </View>
 
       {/* Quick Actions */}
@@ -93,23 +125,51 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       {/* Assets Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Assets</Text>
-        <View style={styles.assetCard}>
-          <View style={styles.assetRow}>
-            <View style={styles.assetInfo}>
-              <View style={styles.assetIcon}>
-                <Text style={styles.assetIconText}>Ξ</Text>
-              </View>
-              <View>
-                <Text style={styles.assetName}>Ethereum</Text>
-                <Text style={styles.assetSymbol}>ETH</Text>
-              </View>
-            </View>
-            <View style={styles.assetBalance}>
-              <Text style={styles.assetAmount}>{balance}</Text>
-              <Text style={styles.assetValue}>{balanceUSD}</Text>
-            </View>
+        {loading ? (
+          <View style={styles.assetCard}>
+            <ActivityIndicator size="small" color={theme.colors.primary} />
           </View>
-        </View>
+        ) : error ? (
+          <View style={styles.assetCard}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : balanceData && balanceData.tokens.length > 0 ? (
+          <View style={styles.assetCard}>
+            {balanceData.tokens.map((token, index) => (
+              <View 
+                key={token.token_address || 'ETH'} 
+                style={[
+                  styles.assetRow,
+                  index > 0 && styles.assetRowBorder,
+                ]}
+              >
+                <View style={styles.assetInfo}>
+                  <View style={styles.assetIcon}>
+                    <Text style={styles.assetIconText}>
+                      {token.symbol === 'ETH' ? 'Ξ' : token.symbol.charAt(0)}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.assetName}>{token.name}</Text>
+                    <Text style={styles.assetSymbol}>{token.symbol}</Text>
+                  </View>
+                </View>
+                <View style={styles.assetBalance}>
+                  <Text style={styles.assetAmount}>
+                    {formatTokenBalance(token.balance_formatted, token.usd_value)}
+                  </Text>
+                  <Text style={styles.assetValue}>
+                    ${token.usd_value?.toFixed(2) || '0.00'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.assetCard}>
+            <Text style={styles.emptyStateText}>No assets found</Text>
+          </View>
+        )}
       </View>
 
       {/* Recent Transactions */}
@@ -227,6 +287,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+  },
+  assetRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
   },
   assetInfo: {
     flexDirection: 'row',
@@ -314,6 +381,15 @@ const styles = StyleSheet.create({
     ...theme.typography.callout,
     color: theme.colors.text.tertiary,
     marginTop: theme.spacing.md,
+  },
+  loader: {
+    marginVertical: theme.spacing.lg,
+  },
+  errorText: {
+    ...theme.typography.callout,
+    color: theme.colors.error || '#FF6B6B',
+    textAlign: 'center',
+    padding: theme.spacing.md,
   },
 });
 
