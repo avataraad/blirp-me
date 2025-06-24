@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
@@ -102,81 +103,117 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Portfolio Header */}
-      <View style={styles.portfolioHeader}>
-        <Text style={styles.portfolioLabel}>Portfolio</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Image 
+          source={require('../../assets/images/blirp-logo.png')} 
+          style={styles.blirpLogo}
+          resizeMode="contain"
+        />
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="chatbubble-outline" size={24} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Icon name="person-outline" size={24} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Total Balance */}
+      <View style={styles.balanceSection}>
+        <View style={styles.balanceHeader}>
+          <Text style={styles.balanceLabel}>Total Balance</Text>
+          <TouchableOpacity>
+            <Icon name="eye-outline" size={20} color={theme.colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
         {loading ? (
           <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
         ) : error ? (
           <Text style={styles.errorText}>{error}</Text>
         ) : (
-          <Text style={styles.portfolioAmount}>
+          <Text style={styles.balanceAmount}>
             ${totalUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         )}
       </View>
 
-      {/* Quick Actions */}
+      {/* Action Buttons */}
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => navigation.navigate('Pay')}
         >
-          <View style={styles.actionIcon}>
-            <Icon name="arrow-up" size={20} color={theme.colors.text.inverse} />
-          </View>
-          <Text style={styles.actionText}>Send</Text>
+          <Text style={styles.actionText}>Pay</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => navigation.navigate('Receive')}
         >
-          <View style={styles.actionIcon}>
-            <Icon name="arrow-down" size={20} color={theme.colors.text.inverse} />
-          </View>
-          <Text style={styles.actionText}>Receive</Text>
+          <Text style={styles.actionText}>Request</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.actionButton}>
-          <View style={styles.actionIcon}>
-            <Icon name="swap-horizontal" size={20} color={theme.colors.text.inverse} />
-          </View>
-          <Text style={styles.actionText}>Swap</Text>
+          <Text style={styles.actionText}>Trade</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Text style={styles.actionText}>•••</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Cash Section */}
-      {cash.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cash</Text>
-          <View style={styles.assetCard}>
-            {cash.map((token) => (
-              <View key={token.token_address} style={styles.assetRow}>
-                <View style={styles.assetInfo}>
-                  <View style={[styles.assetIcon, styles.cashIcon]}>
-                    <Text style={styles.assetIconText}>$</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
-                    <Text style={styles.assetSymbol}>{token.symbol}</Text>
-                  </View>
-                </View>
-                <View style={styles.assetBalance}>
-                  <Text style={styles.assetValue}>
-                    ${token.usd_value?.toFixed(2) || '0.00'}
-                  </Text>
-                </View>
-              </View>
-            ))}
+      {/* Rate Boost Card */}
+      <View style={styles.rateBoostCard}>
+        <View style={styles.rateBoostContent}>
+          <View style={styles.rateBoostHeader}>
+            <View style={styles.rateBoostIcon}>
+              <Icon name="trending-up" size={20} color={theme.colors.text.inverse} />
+            </View>
+            <Text style={styles.rateBoostTitle}>Rate Boost</Text>
+            <TouchableOpacity style={styles.instantButton}>
+              <Icon name="flash" size={16} color={theme.colors.text.primary} />
+              <Text style={styles.instantText}>Instant</Text>
+            </TouchableOpacity>
           </View>
+          <Text style={styles.rateBoostDescription}>
+            Earn 5.25% APY on your digital dollars
+          </Text>
+          <TouchableOpacity>
+            <Text style={styles.learnMore}>Learn more</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.tryButton}>
+          <Text style={styles.tryButtonText}>Try</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Cash Section - USD Digital */}
+      {cash.length > 0 && (
+        <View style={styles.cashSection}>
+          {cash.map((token) => (
+            <View key={token.token_address} style={styles.assetRow}>
+              <View style={styles.assetInfo}>
+                <View style={[styles.assetIcon, styles.cashIcon]}>
+                  <Text style={styles.assetIconText}>$</Text>
+                </View>
+                <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
+              </View>
+              <Text style={styles.assetValue}>
+                ${token.usd_value?.toFixed(2) || '0.00'}
+              </Text>
+            </View>
+          ))}
         </View>
       )}
 
       {/* Assets Section */}
       {assets.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Assets</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Assets</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAll}>See all ❯</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.assetCard}>
             {assets.map((token, index) => (
               <View 
@@ -187,22 +224,31 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 ]}
               >
                 <View style={styles.assetInfo}>
-                  <View style={styles.assetIcon}>
+                  <View style={[
+                    styles.assetIcon, 
+                    token.symbol === 'ETH' ? styles.ethereumIcon : styles.bitcoinIcon
+                  ]}>
                     <Text style={styles.assetIconText}>
-                      {token.symbol === 'ETH' ? 'Ξ' : '₿'}
+                      {token.symbol === 'ETH' ? '♦' : '₿'}
                     </Text>
                   </View>
                   <View>
                     <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
-                    <Text style={styles.assetSymbol}>{token.symbol}</Text>
+                    <Text style={styles.assetAmount}>
+                      {formatTokenBalance(token.balance_formatted, token.usd_value)} {token.symbol}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.assetBalance}>
-                  <Text style={styles.assetAmount}>
-                    {formatTokenBalance(token.balance_formatted, token.usd_value)}
-                  </Text>
                   <Text style={styles.assetValue}>
                     ${token.usd_value?.toFixed(2) || '0.00'}
+                  </Text>
+                  <Text style={[
+                    styles.assetChange,
+                    // Mock price changes for now
+                    token.symbol === 'ETH' ? styles.negativeChange : styles.positiveChange
+                  ]}>
+                    {token.symbol === 'ETH' ? '-1.2%' : '+2.4%'}
                   </Text>
                 </View>
               </View>
@@ -214,26 +260,27 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       {/* Earn Section */}
       {earn.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Earn</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Earn</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAll}>See all ❯</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.assetCard}>
             {earn.map((token) => (
               <View key={token.token_address} style={styles.assetRow}>
                 <View style={styles.assetInfo}>
                   <View style={[styles.assetIcon, styles.earnIcon]}>
-                    <Text style={styles.assetIconText}>Ξ</Text>
+                    <Text style={styles.assetIconText}>♦</Text>
                   </View>
                   <View>
-                    <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
-                    <Text style={styles.assetSymbol}>Staking • {token.symbol}</Text>
+                    <Text style={styles.assetName}>Ethereum Staking</Text>
+                    <Text style={styles.earnAPY}>4.2% APY</Text>
                   </View>
                 </View>
                 <View style={styles.assetBalance}>
-                  <Text style={styles.assetAmount}>
-                    {formatTokenBalance(token.balance_formatted, token.usd_value)}
-                  </Text>
-                  <Text style={styles.assetValue}>
-                    ${token.usd_value?.toFixed(2) || '0.00'}
-                  </Text>
+                  <Text style={styles.earnValue}>+$24.67</Text>
+                  <Text style={styles.earnPeriod}>This month</Text>
                 </View>
               </View>
             ))}
@@ -258,89 +305,187 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background, // #FFFFFF Pure white from design system
+    backgroundColor: theme.colors.background,
   },
   contentContainer: {
     paddingBottom: theme.spacing.xl,
-    paddingHorizontal: 20, // 20px margins from design system
+    paddingHorizontal: 20,
   },
   
-  // Portfolio Header - using design system typography
-  portfolioHeader: {
+  // Header with Blirp logo and icons
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
-    alignItems: 'flex-start',
+    paddingBottom: theme.spacing.lg,
   },
-  portfolioLabel: {
-    ...theme.typography.body, // 17px from design system
-    color: theme.colors.text.secondary, // #8E8E93 70% opacity
-    marginBottom: theme.spacing.xs,
+  blirpLogo: {
+    width: 32,
+    height: 32,
   },
-  portfolioAmount: {
-    ...theme.typography.displayXL, // 52px fontSize from design system
-    color: theme.colors.text.primary, // #000000 Black
-    fontWeight: '600', // Semi-bold from design system
+  headerIcons: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  headerIcon: {
+    padding: theme.spacing.xs,
   },
   
-  // Action buttons - using design system button specs
+  // Total Balance section
+  balanceSection: {
+    marginBottom: theme.spacing.xl,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  balanceLabel: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+  },
+  balanceAmount: {
+    ...theme.typography.displayXL,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+  },
+  
+  // Action buttons row
   actionsContainer: {
     flexDirection: 'row',
-    marginBottom: theme.spacing.xl, // 32px spacing
-    gap: theme.spacing.sm, // 8px gap
+    marginBottom: theme.spacing.xl,
+    gap: 12,
   },
   actionButton: {
-    backgroundColor: theme.colors.surface, // #F9F9F7 Light Gray Cards
-    paddingHorizontal: theme.spacing.lg, // 24px horizontal padding
-    paddingVertical: theme.spacing.sm, // 8px vertical padding
-    borderRadius: 24, // Pill shape from design system
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionText: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.text.primary, // #000000 Black
+    ...theme.typography.callout,
+    color: theme.colors.text.primary,
     fontWeight: '500',
   },
   
-  // Section styling - 8pt grid spacing
+  // Rate Boost Card
+  rateBoostCard: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: theme.spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rateBoostContent: {
+    flex: 1,
+  },
+  rateBoostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  rateBoostIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  rateBoostTitle: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  instantButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  instantText: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.primary,
+    fontWeight: '500',
+  },
+  rateBoostDescription: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    marginBottom: 8,
+  },
+  learnMore: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.primary,
+    fontWeight: '500',
+  },
+  tryButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  tryButtonText: {
+    ...theme.typography.callout,
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
+  },
+  
+  // Cash section (single row)
+  cashSection: {
+    marginBottom: theme.spacing.xl,
+  },
+  
+  // Section styling
   section: {
-    marginBottom: theme.spacing.xl, // 32px between sections
+    marginBottom: theme.spacing.xl,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md, // 16px spacing
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
-    ...theme.typography.title3, // 20px section titles from design system
-    color: theme.colors.text.primary, // #000000 Black
+    ...theme.typography.title3,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
-  sectionSeeAll: {
-    ...theme.typography.callout, // 16px callout
-    color: theme.colors.text.secondary, // #8E8E93 Gray
+  seeAll: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
   },
   
-  // Asset cards - using design system card specs
+  // Asset cards
   assetCard: {
-    backgroundColor: theme.colors.surface, // #F9F9F7 Light Gray
-    borderRadius: 16, // 16px corner radius from design system
-    padding: 0, // Individual rows handle padding
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   assetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 24, // 24px card padding from design system
-    minHeight: 56, // 56px minimum touch target
+    padding: 20,
+    minHeight: 72,
   },
   assetRowBorder: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border, // #C6C6C8
+    borderTopColor: theme.colors.border,
   },
   
-  // Asset info - using design system spacing
+  // Asset info
   assetInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,101 +497,99 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: theme.spacing.md, // 16px spacing
+    marginRight: 16,
   },
   cashIcon: {
-    backgroundColor: theme.colors.primary, // #32D74B Mint Green
+    backgroundColor: theme.colors.primary,
   },
   bitcoinIcon: {
-    backgroundColor: '#000000', // Black for contrast
+    backgroundColor: '#F7931A',
   },
   ethereumIcon: {
-    backgroundColor: '#000000', // Black for contrast  
+    backgroundColor: '#627EEA',
   },
   earnIcon: {
-    backgroundColor: theme.colors.primary, // #32D74B for earn
+    backgroundColor: '#627EEA',
   },
   assetIconText: {
     fontSize: 18,
-    color: theme.colors.text.inverse, // #FFFFFF
+    color: theme.colors.text.inverse,
     fontWeight: '600',
   },
   assetName: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.text.primary, // #000000 Black
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
     fontWeight: '500',
     marginBottom: 2,
   },
-  assetSymbol: {
-    ...theme.typography.footnote, // 13px caption from design system
-    color: theme.colors.text.secondary, // #8E8E93 Gray
+  assetAmount: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+  },
+  earnAPY: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
   },
   
-  // Balance styling - right aligned
+  // Balance styling
   assetBalance: {
     alignItems: 'flex-end',
   },
-  assetAmount: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.text.primary, // #000000 Black
+  assetValue: {
+    ...theme.typography.body,
+    color: theme.colors.text.primary,
     fontWeight: '600',
     marginBottom: 2,
   },
-  assetValue: {
-    ...theme.typography.footnote, // 13px caption
-    color: theme.colors.text.secondary, // #8E8E93 Gray
-  },
   assetChange: {
-    ...theme.typography.footnote, // 13px caption
+    ...theme.typography.footnote,
     fontWeight: '500',
   },
   positiveChange: {
-    color: theme.colors.primary, // #32D74B Mint Green for positive
+    color: theme.colors.primary,
   },
   negativeChange: {
-    color: theme.colors.danger, // #FF3B30 Error Red for negative
+    color: theme.colors.danger,
   },
   
-  // Earn section specific styling
+  // Earn section specific
   earnValue: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.primary, // #32D74B Mint Green
+    ...theme.typography.body,
+    color: theme.colors.primary,
     fontWeight: '600',
     marginBottom: 2,
   },
   earnPeriod: {
-    ...theme.typography.footnote, // 13px caption
-    color: theme.colors.text.secondary, // #8E8E93 Gray
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
   },
   
-  // Empty states
+  // States
   emptyState: {
     alignItems: 'center',
-    paddingVertical: theme.spacing.xxl, // 48px spacing
-    paddingHorizontal: theme.spacing.lg, // 24px spacing
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.lg,
   },
   emptyStateText: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.text.secondary, // #8E8E93 Gray
-    marginTop: theme.spacing.md, // 16px spacing
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.md,
     textAlign: 'center',
   },
   emptyStateSubtext: {
-    ...theme.typography.footnote, // 13px caption
-    color: theme.colors.text.tertiary, // #C7C7CC Disabled
-    marginTop: theme.spacing.sm, // 8px spacing
+    ...theme.typography.footnote,
+    color: theme.colors.text.tertiary,
+    marginTop: theme.spacing.sm,
     textAlign: 'center',
   },
-  
-  // Loading and error states
   loader: {
-    marginVertical: theme.spacing.lg, // 24px spacing
+    marginVertical: theme.spacing.lg,
   },
   errorText: {
-    ...theme.typography.body, // 17px body text
-    color: theme.colors.danger, // #FF3B30 Error Red
+    ...theme.typography.body,
+    color: theme.colors.danger,
     textAlign: 'center',
-    padding: theme.spacing.md, // 16px spacing
+    padding: theme.spacing.md,
   },
 });
 
