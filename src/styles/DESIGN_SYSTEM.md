@@ -14,6 +14,11 @@ Blirp's design system embraces clarity through simplicity. We believe that a pow
 
 ## 🎯 Color System
 
+### Logo Usage
+The Blirp logo comes in two versions:
+- **`blirp_logo_white.png`**: Green logo on white background - Use on white/light backgrounds
+- **`blirp_logo.png`**: White logo on green background - Use on colored/dark backgrounds
+
 ### Primary Accent Color
 - **Blirp Green**: `#7DD88C` - Used sparingly for important actions, success states, and positive indicators
 
