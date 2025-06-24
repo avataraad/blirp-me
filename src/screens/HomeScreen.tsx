@@ -67,14 +67,32 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     fetchBalances();
   }, [fetchBalances]);
 
-  // Get ETH balance for display
-  const ethToken = balanceData ? getEthBalance(balanceData.tokens) : null;
-  const ethBalance = ethToken ? formatTokenBalance(ethToken.balance_formatted, ethToken.usd_value) : '0.0000';
-  const totalUsdValue = balanceData?.total_usd_value || 0;
-  const formattedUsdValue = `$${totalUsdValue.toFixed(2)}`;
+  // Asset mapping with custom names from Issue #38
+  const getAssetsBySection = () => {
+    if (!balanceData?.tokens) return { cash: [], assets: [], earn: [] };
 
-  // Mock transactions for now
-  const transactions = [];
+    const cash = balanceData.tokens.filter(token => token.symbol === 'USDC');
+    const assets = balanceData.tokens.filter(token => 
+      token.symbol === 'ETH' || token.symbol === 'cbBTC'
+    );
+    const earn = balanceData.tokens.filter(token => token.symbol === 'cbETH');
+
+    return { cash, assets, earn };
+  };
+
+  const { cash, assets, earn } = getAssetsBySection();
+  const totalUsdValue = balanceData?.total_usd_value || 0;
+
+  // Custom asset names from Issue #38
+  const getCustomAssetName = (symbol: string) => {
+    switch (symbol) {
+      case 'USDC': return 'Digital USD';
+      case 'ETH': return 'Ethereum';
+      case 'cbBTC': return 'Bitcoin';
+      case 'cbETH': return 'Ethereum'; // In Earn section
+      default: return symbol;
+    }
+  };
 
   return (
     <ScrollView
@@ -84,18 +102,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Balance Card */}
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Total Balance</Text>
+      {/* Portfolio Header */}
+      <View style={styles.portfolioHeader}>
+        <Text style={styles.portfolioLabel}>Portfolio</Text>
         {loading ? (
-          <ActivityIndicator size="large" color={theme.colors.text.inverse} style={styles.loader} />
+          <ActivityIndicator size="large" color={theme.colors.primary} style={styles.loader} />
         ) : error ? (
           <Text style={styles.errorText}>{error}</Text>
         ) : (
-          <>
-            <Text style={styles.balanceAmount}>{ethBalance} ETH</Text>
-            <Text style={styles.balanceUSD}>{formattedUsdValue}</Text>
-          </>
+          <Text style={styles.portfolioAmount}>
+            ${totalUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
         )}
       </View>
 
@@ -105,39 +122,65 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.actionButton}
           onPress={() => navigation.navigate('Pay')}
         >
-          <View style={styles.actionIconContainer}>
-            <Icon name="send" size={24} color={theme.colors.primary} />
+          <View style={styles.actionIcon}>
+            <Icon name="arrow-up" size={20} color={theme.colors.text.inverse} />
           </View>
-          <Text style={styles.actionText}>Pay</Text>
+          <Text style={styles.actionText}>Send</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => navigation.navigate('Receive')}
         >
-          <View style={styles.actionIconContainer}>
-            <Icon name="download" size={24} color={theme.colors.primary} />
+          <View style={styles.actionIcon}>
+            <Icon name="arrow-down" size={20} color={theme.colors.text.inverse} />
           </View>
           <Text style={styles.actionText}>Receive</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton}>
+          <View style={styles.actionIcon}>
+            <Icon name="swap-horizontal" size={20} color={theme.colors.text.inverse} />
+          </View>
+          <Text style={styles.actionText}>Swap</Text>
+        </TouchableOpacity>
       </View>
 
+      {/* Cash Section */}
+      {cash.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cash</Text>
+          <View style={styles.assetCard}>
+            {cash.map((token) => (
+              <View key={token.token_address} style={styles.assetRow}>
+                <View style={styles.assetInfo}>
+                  <View style={[styles.assetIcon, styles.cashIcon]}>
+                    <Text style={styles.assetIconText}>$</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
+                    <Text style={styles.assetSymbol}>{token.symbol}</Text>
+                  </View>
+                </View>
+                <View style={styles.assetBalance}>
+                  <Text style={styles.assetValue}>
+                    ${token.usd_value?.toFixed(2) || '0.00'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Assets Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Assets</Text>
-        {loading ? (
+      {assets.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Assets</Text>
           <View style={styles.assetCard}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-          </View>
-        ) : error ? (
-          <View style={styles.assetCard}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : balanceData && balanceData.tokens.length > 0 ? (
-          <View style={styles.assetCard}>
-            {balanceData.tokens.map((token, index) => (
+            {assets.map((token, index) => (
               <View 
-                key={token.token_address || 'ETH'} 
+                key={token.token_address || token.symbol} 
                 style={[
                   styles.assetRow,
                   index > 0 && styles.assetRowBorder,
@@ -146,11 +189,11 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.assetInfo}>
                   <View style={styles.assetIcon}>
                     <Text style={styles.assetIconText}>
-                      {token.symbol === 'ETH' ? 'Ξ' : token.symbol.charAt(0)}
+                      {token.symbol === 'ETH' ? 'Ξ' : '₿'}
                     </Text>
                   </View>
                   <View>
-                    <Text style={styles.assetName}>{token.name}</Text>
+                    <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
                     <Text style={styles.assetSymbol}>{token.symbol}</Text>
                   </View>
                 </View>
@@ -165,49 +208,49 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             ))}
           </View>
-        ) : (
-          <View style={styles.assetCard}>
-            <Text style={styles.emptyStateText}>No assets found</Text>
-          </View>
-        )}
-      </View>
+        </View>
+      )}
 
-      {/* Recent Transactions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Transactions</Text>
-        {transactions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Icon name="time-outline" size={48} color={theme.colors.text.tertiary} />
-            <Text style={styles.emptyStateText}>No transactions yet</Text>
-          </View>
-        ) : (
-          <View style={styles.transactionsContainer}>
-            {transactions.map((tx) => (
-              <TouchableOpacity key={tx.id} style={styles.transactionCard}>
-                <View style={styles.transactionIcon}>
-                  <Icon
-                    name={tx.type === 'received' ? 'arrow-down' : 'arrow-up'}
-                    size={20}
-                    color={tx.type === 'received' ? theme.colors.success : theme.colors.text.primary}
-                  />
+      {/* Earn Section */}
+      {earn.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Earn</Text>
+          <View style={styles.assetCard}>
+            {earn.map((token) => (
+              <View key={token.token_address} style={styles.assetRow}>
+                <View style={styles.assetInfo}>
+                  <View style={[styles.assetIcon, styles.earnIcon]}>
+                    <Text style={styles.assetIconText}>Ξ</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.assetName}>{getCustomAssetName(token.symbol)}</Text>
+                    <Text style={styles.assetSymbol}>Staking • {token.symbol}</Text>
+                  </View>
                 </View>
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionTitle}>
-                    {tx.type === 'received' ? `From ${tx.from}` : `To ${tx.to}`}
+                <View style={styles.assetBalance}>
+                  <Text style={styles.assetAmount}>
+                    {formatTokenBalance(token.balance_formatted, token.usd_value)}
                   </Text>
-                  <Text style={styles.transactionDate}>{tx.date}</Text>
+                  <Text style={styles.assetValue}>
+                    ${token.usd_value?.toFixed(2) || '0.00'}
+                  </Text>
                 </View>
-                <Text style={[
-                  styles.transactionAmount,
-                  tx.type === 'received' && styles.transactionAmountReceived,
-                ]}>
-                  {tx.type === 'received' ? '+' : '-'}{tx.amount} ETH
-                </Text>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
-        )}
-      </View>
+        </View>
+      )}
+
+      {/* Empty State */}
+      {!loading && !error && cash.length === 0 && assets.length === 0 && earn.length === 0 && (
+        <View style={styles.emptyState}>
+          <Icon name="wallet-outline" size={48} color={theme.colors.text.tertiary} />
+          <Text style={styles.emptyStateText}>No assets found</Text>
+          <Text style={styles.emptyStateSubtext}>
+            Your portfolio will appear here once you have assets
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -215,181 +258,195 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.background, // #FFFFFF Pure white from design system
   },
   contentContainer: {
     paddingBottom: theme.spacing.xl,
+    paddingHorizontal: 20, // 20px margins from design system
   },
-  balanceCard: {
-    backgroundColor: theme.colors.primary,
-    margin: theme.spacing.lg,
-    padding: theme.spacing.xl,
-    borderRadius: theme.borderRadius.xl,
-    alignItems: 'center',
-    ...theme.shadows.lg,
+  
+  // Portfolio Header - using design system typography
+  portfolioHeader: {
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+    alignItems: 'flex-start',
   },
-  balanceLabel: {
-    ...theme.typography.callout,
-    color: theme.colors.text.inverse,
-    opacity: 0.8,
-    marginBottom: theme.spacing.sm,
-  },
-  balanceAmount: {
-    ...theme.typography.largeTitle,
-    color: theme.colors.text.inverse,
+  portfolioLabel: {
+    ...theme.typography.body, // 17px from design system
+    color: theme.colors.text.secondary, // #8E8E93 70% opacity
     marginBottom: theme.spacing.xs,
   },
-  balanceUSD: {
-    ...theme.typography.title2,
-    color: theme.colors.text.inverse,
-    opacity: 0.9,
+  portfolioAmount: {
+    ...theme.typography.displayXL, // 52px fontSize from design system
+    color: theme.colors.text.primary, // #000000 Black
+    fontWeight: '600', // Semi-bold from design system
   },
+  
+  // Action buttons - using design system button specs
   actionsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
+    marginBottom: theme.spacing.xl, // 32px spacing
+    gap: theme.spacing.sm, // 8px gap
   },
   actionButton: {
-    flex: 1,
+    backgroundColor: theme.colors.surface, // #F9F9F7 Light Gray Cards
+    paddingHorizontal: theme.spacing.lg, // 24px horizontal padding
+    paddingVertical: theme.spacing.sm, // 8px vertical padding
+    borderRadius: 24, // Pill shape from design system
     alignItems: 'center',
-  },
-  actionIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.sm,
-    ...theme.shadows.md,
   },
   actionText: {
-    ...theme.typography.callout,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.text.primary, // #000000 Black
+    fontWeight: '500',
   },
+  
+  // Section styling - 8pt grid spacing
   section: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.xl, // 32px between sections
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md, // 16px spacing
   },
   sectionTitle: {
-    ...theme.typography.title3,
-    color: theme.colors.text.primary,
-    marginBottom: theme.spacing.md,
+    ...theme.typography.title3, // 20px section titles from design system
+    color: theme.colors.text.primary, // #000000 Black
+    fontWeight: '600',
   },
+  sectionSeeAll: {
+    ...theme.typography.callout, // 16px callout
+    color: theme.colors.text.secondary, // #8E8E93 Gray
+  },
+  
+  // Asset cards - using design system card specs
   assetCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface, // #F9F9F7 Light Gray
+    borderRadius: 16, // 16px corner radius from design system
+    padding: 0, // Individual rows handle padding
   },
   assetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: theme.spacing.sm,
+    padding: 24, // 24px card padding from design system
+    minHeight: 56, // 56px minimum touch target
   },
   assetRowBorder: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    marginTop: theme.spacing.sm,
-    paddingTop: theme.spacing.md,
+    borderTopColor: theme.colors.border, // #C6C6C8
   },
+  
+  // Asset info - using design system spacing
   assetInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   assetIcon: {
     width: 40,
     height: 40,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.primary,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: theme.spacing.md,
+    marginRight: theme.spacing.md, // 16px spacing
+  },
+  cashIcon: {
+    backgroundColor: theme.colors.primary, // #32D74B Mint Green
+  },
+  bitcoinIcon: {
+    backgroundColor: '#000000', // Black for contrast
+  },
+  ethereumIcon: {
+    backgroundColor: '#000000', // Black for contrast  
+  },
+  earnIcon: {
+    backgroundColor: theme.colors.primary, // #32D74B for earn
   },
   assetIconText: {
-    fontSize: 20,
-    color: theme.colors.text.inverse,
-    fontWeight: '700',
+    fontSize: 18,
+    color: theme.colors.text.inverse, // #FFFFFF
+    fontWeight: '600',
   },
   assetName: {
-    ...theme.typography.headline,
-    color: theme.colors.text.primary,
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.text.primary, // #000000 Black
+    fontWeight: '500',
+    marginBottom: 2,
   },
   assetSymbol: {
-    ...theme.typography.footnote,
-    color: theme.colors.text.tertiary,
+    ...theme.typography.footnote, // 13px caption from design system
+    color: theme.colors.text.secondary, // #8E8E93 Gray
   },
+  
+  // Balance styling - right aligned
   assetBalance: {
     alignItems: 'flex-end',
   },
   assetAmount: {
-    ...theme.typography.headline,
-    color: theme.colors.text.primary,
-  },
-  assetValue: {
-    ...theme.typography.footnote,
-    color: theme.colors.text.tertiary,
-  },
-  transactionsContainer: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    overflow: 'hidden',
-  },
-  transactionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  transactionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionTitle: {
-    ...theme.typography.callout,
-    color: theme.colors.text.primary,
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.text.primary, // #000000 Black
+    fontWeight: '600',
     marginBottom: 2,
   },
-  transactionDate: {
-    ...theme.typography.footnote,
-    color: theme.colors.text.tertiary,
+  assetValue: {
+    ...theme.typography.footnote, // 13px caption
+    color: theme.colors.text.secondary, // #8E8E93 Gray
   },
-  transactionAmount: {
-    ...theme.typography.callout,
-    color: theme.colors.text.primary,
+  assetChange: {
+    ...theme.typography.footnote, // 13px caption
+    fontWeight: '500',
+  },
+  positiveChange: {
+    color: theme.colors.primary, // #32D74B Mint Green for positive
+  },
+  negativeChange: {
+    color: theme.colors.danger, // #FF3B30 Error Red for negative
+  },
+  
+  // Earn section specific styling
+  earnValue: {
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.primary, // #32D74B Mint Green
     fontWeight: '600',
+    marginBottom: 2,
   },
-  transactionAmountReceived: {
-    color: theme.colors.success,
+  earnPeriod: {
+    ...theme.typography.footnote, // 13px caption
+    color: theme.colors.text.secondary, // #8E8E93 Gray
   },
+  
+  // Empty states
   emptyState: {
     alignItems: 'center',
-    paddingVertical: theme.spacing.xxl,
+    paddingVertical: theme.spacing.xxl, // 48px spacing
+    paddingHorizontal: theme.spacing.lg, // 24px spacing
   },
   emptyStateText: {
-    ...theme.typography.callout,
-    color: theme.colors.text.tertiary,
-    marginTop: theme.spacing.md,
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.text.secondary, // #8E8E93 Gray
+    marginTop: theme.spacing.md, // 16px spacing
+    textAlign: 'center',
   },
+  emptyStateSubtext: {
+    ...theme.typography.footnote, // 13px caption
+    color: theme.colors.text.tertiary, // #C7C7CC Disabled
+    marginTop: theme.spacing.sm, // 8px spacing
+    textAlign: 'center',
+  },
+  
+  // Loading and error states
   loader: {
-    marginVertical: theme.spacing.lg,
+    marginVertical: theme.spacing.lg, // 24px spacing
   },
   errorText: {
-    ...theme.typography.callout,
-    color: theme.colors.error || '#FF6B6B',
+    ...theme.typography.body, // 17px body text
+    color: theme.colors.danger, // #FF3B30 Error Red
     textAlign: 'center',
-    padding: theme.spacing.md,
+    padding: theme.spacing.md, // 16px spacing
   },
 });
 
