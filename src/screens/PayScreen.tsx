@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,20 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { ethers } from 'ethers';
+import {
+  simulateTransaction,
+  executeTransaction,
+  convertGasToUSD,
+  SimulationResult,
+} from '../services/transactionService';
+import { getEthBalance, getEthPrice } from '../services/moralisService';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -28,21 +37,105 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
+  
+  // Real blockchain data
+  const [balance, setBalance] = useState<number>(0);
+  const [ethPrice, setEthPrice] = useState<number>(1900);
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  
+  // Transaction simulation state
+  const [simulation, setSimulation] = useState<SimulationResult | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [gasEstimateUSD, setGasEstimateUSD] = useState<string>('0.00');
+  
+  // Transaction execution state
+  const [isExecuting, setIsExecuting] = useState(false);
 
-  // Mock balance - will be replaced with real data
-  const balance = 0.1234;
-  const balanceUSD = 234.56;
-  const gasEstimate = 0.001;
-  // const gasEstimateUSD = 1.90;
+  // Load wallet data on component mount
+  useEffect(() => {
+    const loadWalletData = async () => {
+      try {
+        // For demo purposes, using a hardcoded address - in real app this would come from wallet service
+        const demoAddress = '0x742d35Cc6634C0532925a3b8D37AAb63e6f3Cd55';
+        setWalletAddress(demoAddress);
+        
+        // Load balance and ETH price
+        const [balanceResult, priceResult] = await Promise.all([
+          getEthBalance(demoAddress),
+          getEthPrice(),
+        ]);
+        
+        setBalance(parseFloat(balanceResult));
+        setEthPrice(priceResult);
+      } catch (error) {
+        console.error('Failed to load wallet data:', error);
+        Alert.alert('Error', 'Failed to load wallet data');
+      }
+    };
+
+    loadWalletData();
+  }, []);
+
+  // Simulate transaction when recipient and amount are valid
+  const simulateTransactionDebounced = useCallback(
+    async (recipientAddr: string, amountEth: string) => {
+      if (!recipientAddr || !amountEth || !walletAddress) return;
+      
+      try {
+        setIsSimulating(true);
+        const amountWei = ethers.utils.parseEther(amountEth).toString();
+        
+        const result = await simulateTransaction({
+          from: walletAddress,
+          to: recipientAddr,
+          value: amountWei,
+        });
+        
+        setSimulation(result);
+        
+        if (result.success) {
+          const gasWei = ethers.BigNumber.from(result.gasUsed).mul(result.maxFeePerGas);
+          const gasUSD = await convertGasToUSD(gasWei.toString(), ethPrice);
+          setGasEstimateUSD(gasUSD);
+        }
+      } catch (error) {
+        console.error('Simulation failed:', error);
+        setSimulation(null);
+      } finally {
+        setIsSimulating(false);
+      }
+    },
+    [walletAddress, ethPrice]
+  );
+
+  useEffect(() => {
+    if (isValidAddress && amount && !isNaN(parseFloat(amount))) {
+      // Debounce simulation calls
+      const timeoutId = setTimeout(() => {
+        simulateTransactionDebounced(recipient, amount);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSimulation(null);
+    }
+  }, [recipient, amount, isValidAddress, simulateTransactionDebounced]);
 
   const handleRecipientChange = (text: string) => {
     setRecipient(text);
 
-    // Simple validation for demo
+    // Validate recipient
     if (text.startsWith('@')) {
+      // @tag validation - TODO: implement tag resolution in Issue #43
       setIsValidAddress(text.length > 3);
     } else if (text.startsWith('0x')) {
-      setIsValidAddress(text.length === 42);
+      // Ethereum address validation
+      try {
+        const isValid = ethers.utils.isAddress(text);
+        setIsValidAddress(isValid);
+      } catch {
+        setIsValidAddress(false);
+      }
     } else {
       setIsValidAddress(null);
     }
@@ -57,7 +150,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     setAmount(cleaned);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!isValidAddress) {
       Alert.alert('Invalid Recipient', 'Please enter a valid tag or Ethereum address.');
       return;
@@ -68,28 +161,96 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (parseFloat(amount) + gasEstimate > balance) {
-      Alert.alert('Insufficient Balance', 'You don\'t have enough ETH to complete this transaction.');
+    if (!simulation || !simulation.success) {
+      Alert.alert('Transaction Error', simulation?.error || 'Unable to simulate transaction');
       return;
     }
 
-    // For now, just show success
+    // Show transaction preview with warnings
+    const warningMessages = simulation.warnings
+      .filter(w => w.severity === 'warning')
+      .map(w => w.message)
+      .join('\n');
+
+    const gasEth = ethers.utils.formatEther(
+      ethers.BigNumber.from(simulation.gasUsed).mul(simulation.maxFeePerGas)
+    );
+
+    const confirmMessage = `
+Send ${amount} ETH to ${recipient}
+
+Network Fee: ~${parseFloat(gasEth).toFixed(6)} ETH (~$${gasEstimateUSD})
+Total: ${(parseFloat(amount) + parseFloat(gasEth)).toFixed(6)} ETH
+
+${warningMessages ? '\n⚠️ Warnings:\n' + warningMessages : ''}
+
+This action requires biometric authentication.`;
+
     Alert.alert(
-      'Transaction Sent',
-      `Sent ${amount} ETH to ${recipient}`,
+      'Confirm Transaction',
+      confirmMessage,
       [
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'OK',
-          onPress: () => {
-            navigation.navigate('Home');
-          },
+          text: 'Send',
+          style: 'default',
+          onPress: executeTransactionHandler,
         },
       ]
     );
   };
 
-  const totalAmount = amount ? parseFloat(amount) + gasEstimate : gasEstimate;
+  const executeTransactionHandler = async () => {
+    if (!simulation || !walletAddress) return;
+
+    try {
+      setIsExecuting(true);
+
+      const amountWei = ethers.utils.parseEther(amount).toString();
+      
+      const result = await executeTransaction({
+        from: walletAddress,
+        to: recipient,
+        value: amountWei,
+      });
+
+      // Success
+      Alert.alert(
+        'Transaction Sent!',
+        `Transaction Hash: ${result.transactionHash}\n\nYour transaction is being processed by the network.`,
+        [
+          {
+            text: 'View Home',
+            onPress: () => {
+              // Reset form
+              setRecipient('');
+              setAmount('');
+              setSimulation(null);
+              navigation.navigate('Home');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      Alert.alert(
+        'Transaction Failed',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  // Calculate total amount including gas fees
+  const gasEstimateEth = simulation && simulation.success ? 
+    parseFloat(ethers.utils.formatEther(
+      ethers.BigNumber.from(simulation.gasUsed).mul(simulation.maxFeePerGas)
+    )) : 0.001; // Fallback estimate
+  
+  const totalAmount = amount ? parseFloat(amount) + gasEstimateEth : gasEstimateEth;
   const isInsufficientBalance = totalAmount > balance;
+  const balanceUSD = balance * ethPrice;
 
   return (
     <KeyboardAvoidingView
@@ -104,7 +265,10 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         {/* Balance Display */}
         <View style={styles.balanceSection}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>{balance.toFixed(4)} ETH</Text>
+          <Text style={styles.balanceAmount}>
+            {balance.toFixed(4)} ETH
+            {balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
+          </Text>
           <Text style={styles.balanceUSD}>${balanceUSD.toFixed(2)}</Text>
         </View>
 
@@ -148,7 +312,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             {amount && (
               <Text style={styles.amountUSD}>
-                ≈ ${(parseFloat(amount) * (balanceUSD / balance)).toFixed(2)}
+                ≈ ${(parseFloat(amount) * ethPrice).toFixed(2)}
               </Text>
             )}
           </View>
@@ -163,8 +327,41 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Network Fee</Text>
-              <Text style={styles.summaryValue}>~{gasEstimate} ETH</Text>
+              <View style={styles.gasEstimateContainer}>
+                {isSimulating ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <Text style={styles.summaryValue}>
+                    ~{gasEstimateEth.toFixed(6)} ETH
+                    {gasEstimateUSD !== '0.00' && (
+                      <Text style={styles.gasUSD}> (~${gasEstimateUSD})</Text>
+                    )}
+                  </Text>
+                )}
+              </View>
             </View>
+            
+            {/* Warnings */}
+            {simulation?.warnings && simulation.warnings.length > 0 && (
+              <View style={styles.warningsContainer}>
+                {simulation.warnings.map((warning, index) => (
+                  <View key={index} style={styles.warningRow}>
+                    <Icon
+                      name={warning.severity === 'error' ? 'alert-circle' : 'warning'}
+                      size={16}
+                      color={warning.severity === 'error' ? theme.colors.danger : theme.colors.warning}
+                    />
+                    <Text style={[
+                      styles.warningText,
+                      warning.severity === 'error' && styles.errorText
+                    ]}>
+                      {warning.message}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryTotalLabel}>Total</Text>
@@ -172,7 +369,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
                 styles.summaryTotalValue,
                 isInsufficientBalance && styles.insufficientBalance,
               ]}>
-                {totalAmount.toFixed(4)} ETH
+                {totalAmount.toFixed(6)} ETH
               </Text>
             </View>
           </View>
@@ -183,17 +380,25 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!isValidAddress || !amount || isInsufficientBalance) && styles.sendButtonDisabled,
+              (!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!isValidAddress || !amount || isInsufficientBalance}
+            disabled={!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)}
           >
-            <Text style={[
-              styles.sendButtonText,
-              (!isValidAddress || !amount || isInsufficientBalance) && styles.sendButtonTextDisabled,
-            ]}>
-              {isInsufficientBalance ? 'Insufficient Balance' : 'Send'}
-            </Text>
+            {isExecuting ? (
+              <ActivityIndicator size="small" color={theme.colors.text.inverse} />
+            ) : (
+              <Text style={[
+                styles.sendButtonText,
+                (!isValidAddress || !amount || isInsufficientBalance || (simulation && !simulation.success)) && styles.sendButtonTextDisabled,
+              ]}>
+                {isInsufficientBalance 
+                  ? 'Insufficient Balance' 
+                  : simulation && !simulation.success 
+                    ? 'Transaction Error'
+                    : 'Send'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -326,6 +531,31 @@ const styles = StyleSheet.create({
   },
   sendButtonTextDisabled: {
     color: theme.colors.text.tertiary,
+  },
+  gasEstimateContainer: {
+    alignItems: 'flex-end',
+  },
+  gasUSD: {
+    ...theme.typography.caption2,
+    color: theme.colors.text.tertiary,
+  },
+  warningsContainer: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  warningText: {
+    ...theme.typography.caption1,
+    color: theme.colors.warning,
+    flex: 1,
+  },
+  errorText: {
+    color: theme.colors.danger,
   },
 });
 
