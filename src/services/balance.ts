@@ -1,5 +1,8 @@
 import axios from 'axios';
 import Config from 'react-native-config';
+import { getBalance } from 'viem/actions';
+import { formatEther } from 'viem';
+import { config } from '../config/wagmi';
 
 // Moralis API configuration
 const MORALIS_API_KEY = Config.MORALIS_API_KEY;
@@ -133,17 +136,34 @@ export const getEthBalanceFromTokens = (tokens: TokenBalance[]): TokenBalance | 
 };
 
 /**
- * Get ETH balance for a specific address
+ * Get ETH balance for a specific address using wagmi/viem
  * @param address Ethereum address
  * @returns ETH balance as string
  */
 export const getEthBalance = async (address: string): Promise<string> => {
   try {
+    const balance = await getBalance(config, {
+      address: address as `0x${string}`
+    });
+    return formatEther(balance);
+  } catch (error) {
+    console.error('Failed to get ETH balance:', error);
+    return '0';
+  }
+};
+
+/**
+ * Get ETH balance for a specific address using Moralis (with token data)
+ * @param address Ethereum address
+ * @returns ETH balance as string
+ */
+export const getEthBalanceFromMoralis = async (address: string): Promise<string> => {
+  try {
     const balances = await getWalletBalances(address);
     const ethToken = getEthBalanceFromTokens(balances.tokens);
     return ethToken ? ethToken.balance_formatted : '0';
   } catch (error) {
-    console.error('Failed to get ETH balance:', error);
+    console.error('Failed to get ETH balance from Moralis:', error);
     return '0';
   }
 };
