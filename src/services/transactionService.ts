@@ -1,7 +1,8 @@
 import axios from 'axios';
 import Config from 'react-native-config';
-import { encodeFunctionData, formatEther, parseEther, parseGwei } from 'viem';
-import { estimateFeesPerGas, estimateGas } from 'viem/actions';
+import { encodeFunctionData, formatEther, parseEther, parseGwei, parseTransaction } from 'viem';
+import { estimateFeesPerGas, estimateGas, getTransactionCount, sendRawTransaction, waitForTransactionReceipt } from 'viem/actions';
+import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
 import * as Keychain from 'react-native-keychain';
 
@@ -335,14 +336,12 @@ const getPrivateKeyFromSecureStorage = async (): Promise<string> => {
  */
 const getCurrentNonce = async (address: string): Promise<number> => {
   try {
-    const response = await axios.post(ALCHEMY_RPC_URL, {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'eth_getTransactionCount',
-      params: [address, 'pending'] // Use 'pending' to include pending transactions
+    const nonce = await getTransactionCount(config, {
+      address: address as `0x${string}`,
+      blockTag: 'pending' // Include pending transactions
     });
     
-    return parseInt(response.data.result, 16);
+    return Number(nonce);
   } catch (error) {
     console.error('Failed to get nonce:', error);
     throw new Error('Unable to get transaction nonce');
@@ -359,33 +358,33 @@ export const signTransaction = async (
   try {
     // Get the private key from secure storage
     const privateKey = await getPrivateKeyFromSecureStorage();
-    const wallet = new ethers.Wallet(privateKey);
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
     
     // Get current nonce
     const nonce = await getCurrentNonce(params.from);
     
-    // Build transaction object (note: don't include 'from' field)
-    let transaction: ethers.providers.TransactionRequest = {
-      to: params.to,
-      value: ethers.BigNumber.from(params.value),
+    // Build transaction object
+    let transaction: any = {
+      to: params.to as `0x${string}`,
+      value: BigInt(params.value),
       nonce,
-      gasLimit: ethers.BigNumber.from(simulationResult.gasLimit),
-      maxFeePerGas: ethers.BigNumber.from(simulationResult.maxFeePerGas),
-      maxPriorityFeePerGas: ethers.BigNumber.from(simulationResult.maxPriorityFeePerGas),
-      type: 2, // EIP-1559 transaction
+      gas: BigInt(simulationResult.gasLimit),
+      maxFeePerGas: BigInt(simulationResult.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(simulationResult.maxPriorityFeePerGas),
+      type: 'eip1559' as const,
       chainId: 1 // Ethereum mainnet
     };
     
     // Handle ERC-20 token transfers
     if (params.tokenAddress && params.tokenAmount) {
-      transaction.to = params.tokenAddress;
-      transaction.value = ethers.BigNumber.from(0);
-      transaction.data = buildERC20TransferData(params.to, params.tokenAmount);
+      transaction.to = params.tokenAddress as `0x${string}`;
+      transaction.value = BigInt(0);
+      transaction.data = buildERC20TransferData(params.to, params.tokenAmount) as `0x${string}`;
     }
     
-    // Sign the transaction
-    const signedTx = await wallet.signTransaction(transaction);
-    const parsedTx = ethers.utils.parseTransaction(signedTx);
+    // Sign the transaction with viem
+    const signedTx = await account.signTransaction(transaction);
+    const parsedTx = parseTransaction(signedTx);
     
     return {
       hash: parsedTx.hash!,
@@ -411,18 +410,11 @@ export const broadcastTransaction = async (
   signedTransaction: SignedTransaction
 ): Promise<string> => {
   try {
-    const response = await axios.post(ALCHEMY_RPC_URL, {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'eth_sendRawTransaction',
-      params: [signedTransaction.rawTransaction]
+    const hash = await sendRawTransaction(config, {
+      serializedTransaction: signedTransaction.rawTransaction as `0x${string}`
     });
     
-    if (response.data.error) {
-      throw new Error(response.data.error.message);
-    }
-    
-    return response.data.result; // Transaction hash
+    return hash;
   } catch (error) {
     console.error('Transaction broadcast failed:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to broadcast transaction');
@@ -437,18 +429,20 @@ export const waitForTransaction = async (
   confirmations: number = 1
 ): Promise<TransactionReceipt> => {
   try {
-    const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_RPC_URL);
-    const receipt = await provider.waitForTransaction(transactionHash, confirmations);
+    const receipt = await waitForTransactionReceipt(config, {
+      hash: transactionHash as `0x${string}`,
+      confirmations
+    });
     
     return {
       transactionHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber,
+      blockNumber: Number(receipt.blockNumber),
       blockHash: receipt.blockHash,
       from: receipt.from,
-      to: receipt.to,
+      to: receipt.to || '',
       gasUsed: receipt.gasUsed.toString(),
       effectiveGasPrice: receipt.effectiveGasPrice.toString(),
-      status: receipt.status!,
+      status: receipt.status === 'success' ? 1 : 0,
       logs: receipt.logs
     };
   } catch (error) {
@@ -480,7 +474,7 @@ export const executeTransaction = async (
         authenticationPrompt: {
           title: 'Confirm Transaction',
           subtitle: 'Authenticate to sign this transaction',
-          description: `Sending ${ethers.utils.formatEther(params.value)} ETH`,
+          description: `Sending ${formatEther(BigInt(params.value))} ETH`,
           cancel: 'Cancel'
         }
       });
