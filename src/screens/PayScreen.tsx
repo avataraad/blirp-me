@@ -15,7 +15,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { ethers } from 'ethers';
+import { isAddress, parseEther, formatEther } from 'viem';
 import {
   simulateTransaction,
   executeTransaction,
@@ -83,7 +83,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       
       try {
         setIsSimulating(true);
-        const amountWei = ethers.utils.parseEther(amountEth).toString();
+        const amountWei = parseEther(amountEth).toString();
         
         const result = await simulateTransaction({
           from: walletAddress,
@@ -94,7 +94,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         setSimulation(result);
         
         if (result.success) {
-          const gasWei = ethers.BigNumber.from(result.gasUsed).mul(result.maxFeePerGas);
+          const gasWei = BigInt(result.gasUsed) * BigInt(result.maxFeePerGas);
           const gasUSD = await convertGasToUSD(gasWei.toString(), ethPrice);
           setGasEstimateUSD(gasUSD);
         }
@@ -131,7 +131,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     } else if (text.startsWith('0x')) {
       // Ethereum address validation
       try {
-        const isValid = ethers.utils.isAddress(text);
+        const isValid = isAddress(text);
         setIsValidAddress(isValid);
       } catch {
         setIsValidAddress(false);
@@ -172,8 +172,8 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       .map(w => w.message)
       .join('\n');
 
-    const gasEth = ethers.utils.formatEther(
-      ethers.BigNumber.from(simulation.gasUsed).mul(simulation.maxFeePerGas)
+    const gasEth = formatEther(
+      BigInt(simulation.gasUsed) * BigInt(simulation.maxFeePerGas)
     );
 
     const confirmMessage = `
@@ -206,7 +206,7 @@ This action requires biometric authentication.`;
     try {
       setIsExecuting(true);
 
-      const amountWei = ethers.utils.parseEther(amount).toString();
+      const amountWei = parseEther(amount).toString();
       
       const result = await executeTransaction({
         from: walletAddress,
@@ -244,8 +244,8 @@ This action requires biometric authentication.`;
 
   // Calculate total amount including gas fees
   const gasEstimateEth = simulation && simulation.success ? 
-    parseFloat(ethers.utils.formatEther(
-      ethers.BigNumber.from(simulation.gasUsed).mul(simulation.maxFeePerGas)
+    parseFloat(formatEther(
+      BigInt(simulation.gasUsed) * BigInt(simulation.maxFeePerGas)
     )) : 0.001; // Fallback estimate
   
   const totalAmount = amount ? parseFloat(amount) + gasEstimateEth : gasEstimateEth;
