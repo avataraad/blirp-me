@@ -1,6 +1,8 @@
 import axios from 'axios';
 import Config from 'react-native-config';
-import { ethers } from 'ethers';
+import { encodeFunctionData, formatEther, parseEther, parseGwei } from 'viem';
+import { estimateFeesPerGas, estimateGas } from 'viem/actions';
+import { config } from '../config/wagmi';
 import * as Keychain from 'react-native-keychain';
 
 // Alchemy API configuration
@@ -69,7 +71,7 @@ export interface TransactionReceipt {
 }
 
 /**
- * Get current gas prices from Alchemy
+ * Get current gas prices using viem
  */
 export const getCurrentGasPrices = async (): Promise<{
   maxFeePerGas: string;
@@ -77,37 +79,20 @@ export const getCurrentGasPrices = async (): Promise<{
   gasPrice: string;
 }> => {
   try {
-    const response = await axios.post(ALCHEMY_RPC_URL, {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'eth_feeHistory',
-      params: [
-        '0x1', // 1 block
-        'latest',
-        [50] // 50th percentile
-      ]
-    });
-
-    const feeHistory = response.data.result;
-    const baseFeePerGas = parseInt(feeHistory.baseFeePerGas?.[0] || '0x4a817c800', 16);
-    const priorityFee = parseInt(feeHistory.reward?.[0]?.[0] || '0x77359400', 16);
+    const fees = await estimateFeesPerGas(config);
     
-    // Add 10% buffer to priority fee
-    const maxPriorityFeePerGas = Math.floor(priorityFee * 1.1);
-    const maxFeePerGas = baseFeePerGas * 2 + maxPriorityFeePerGas;
-
     return {
-      maxFeePerGas: maxFeePerGas.toString(),
-      maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
-      gasPrice: maxFeePerGas.toString()
+      maxFeePerGas: fees.maxFeePerGas?.toString() || parseGwei('20').toString(),
+      maxPriorityFeePerGas: fees.maxPriorityFeePerGas?.toString() || parseGwei('2').toString(),
+      gasPrice: fees.maxFeePerGas?.toString() || parseGwei('20').toString()
     };
   } catch (error) {
     console.error('Failed to get gas prices:', error);
-    // Fallback gas prices (in wei)
+    // Fallback gas prices
     return {
-      maxFeePerGas: '20000000000', // 20 gwei
-      maxPriorityFeePerGas: '2000000000', // 2 gwei
-      gasPrice: '20000000000'
+      maxFeePerGas: parseGwei('20').toString(),
+      maxPriorityFeePerGas: parseGwei('2').toString(),
+      gasPrice: parseGwei('20').toString()
     };
   }
 };
@@ -116,11 +101,20 @@ export const getCurrentGasPrices = async (): Promise<{
  * Build transaction data for ERC-20 token transfer
  */
 const buildERC20TransferData = (to: string, amount: string): string => {
-  const transferInterface = new ethers.utils.Interface([
-    'function transfer(address to, uint256 amount) returns (bool)'
-  ]);
-  
-  return transferInterface.encodeFunctionData('transfer', [to, amount]);
+  return encodeFunctionData({
+    abi: [{
+      name: 'transfer',
+      type: 'function',
+      inputs: [
+        { name: 'to', type: 'address' },
+        { name: 'amount', type: 'uint256' }
+      ],
+      outputs: [{ name: '', type: 'bool' }],
+      stateMutability: 'nonpayable'
+    }],
+    functionName: 'transfer',
+    args: [to as `0x${string}`, BigInt(amount)]
+  });
 };
 
 /**
@@ -131,30 +125,37 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
     // Get current gas prices
     const gasPrices = await getCurrentGasPrices();
     
-    // Build transaction object
+    // Build transaction object for viem
     let transaction: any = {
-      from: params.from,
-      to: params.to,
-      value: params.value,
-      maxFeePerGas: gasPrices.maxFeePerGas,
-      maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas
+      account: params.from as `0x${string}`,
+      to: params.to as `0x${string}`,
+      value: BigInt(params.value),
+      maxFeePerGas: BigInt(gasPrices.maxFeePerGas),
+      maxPriorityFeePerGas: BigInt(gasPrices.maxPriorityFeePerGas)
     };
 
     // Handle ERC-20 token transfers
     if (params.tokenAddress && params.tokenAmount) {
-      transaction.to = params.tokenAddress;
-      transaction.value = '0x0'; // No ETH value for token transfers
-      transaction.data = buildERC20TransferData(params.to, params.tokenAmount);
+      transaction.to = params.tokenAddress as `0x${string}`;
+      transaction.value = BigInt(0);
+      transaction.data = buildERC20TransferData(params.to, params.tokenAmount) as `0x${string}`;
     }
 
-    // Call Alchemy simulation API
+    // Estimate gas using viem
+    const gasEstimate = await estimateGas(config, transaction);
+
+    // For now, we'll use the gas estimate since Alchemy's simulation API isn't directly supported in viem
+    // In a real implementation, you might want to use tenderly or another simulation service
     const response = await axios.post(ALCHEMY_RPC_URL, {
       id: 1,
       jsonrpc: '2.0',
       method: 'alchemy_simulateAssetChanges',
       params: [{
-        ...transaction,
-        gas: '0x5208' // 21000 gas limit for estimation
+        from: params.from,
+        to: transaction.to,
+        value: `0x${params.value.toString(16)}`,
+        data: transaction.data,
+        gas: `0x${gasEstimate.toString(16)}`
       }]
     });
 
@@ -177,16 +178,8 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
 
     const result = response.data.result;
     
-    // Estimate gas usage more accurately
-    const gasEstimateResponse = await axios.post(ALCHEMY_RPC_URL, {
-      id: 2,
-      jsonrpc: '2.0',
-      method: 'eth_estimateGas',
-      params: [transaction]
-    });
-
-    const gasUsed = gasEstimateResponse.data.result ? 
-      parseInt(gasEstimateResponse.data.result, 16).toString() : '21000';
+    // Use the gas estimate we already calculated
+    const gasUsed = gasEstimate.toString();
 
     // Process asset changes
     const assetChanges: AssetChange[] = result.changes?.map((change: any) => ({
@@ -245,8 +238,8 @@ const generateTransactionWarnings = (
   const warnings: TransactionWarning[] = [];
   
   // Calculate gas cost in wei
-  const gasCostWei = ethers.BigNumber.from(gasUsed).mul(ethers.BigNumber.from(maxFeePerGas));
-  const gasCostEth = ethers.utils.formatEther(gasCostWei);
+  const gasCostWei = BigInt(gasUsed) * BigInt(maxFeePerGas);
+  const gasCostEth = formatEther(gasCostWei);
   
   // High gas warning (>$10 USD assuming $1900 ETH)
   if (parseFloat(gasCostEth) > 0.005) {
@@ -259,7 +252,7 @@ const generateTransactionWarnings = (
   
   // Large amount warning (>1 ETH for native transfers)
   if (!params.tokenAddress) {
-    const valueEth = ethers.utils.formatEther(params.value);
+    const valueEth = formatEther(BigInt(params.value));
     if (parseFloat(valueEth) > 1) {
       warnings.push({
         type: 'large-amount',
@@ -286,7 +279,7 @@ const generateTransactionWarnings = (
  */
 export const convertGasToUSD = async (gasWei: string, ethPriceUSD: number = 1900): Promise<string> => {
   try {
-    const gasEth = ethers.utils.formatEther(gasWei);
+    const gasEth = formatEther(BigInt(gasWei));
     const gasUSD = parseFloat(gasEth) * ethPriceUSD;
     return gasUSD.toFixed(2);
   } catch (error) {
@@ -303,7 +296,7 @@ export const formatAssetChange = (change: AssetChange): {
   symbol: string;
 } => {
   try {
-    const amount = ethers.utils.formatUnits(change.amount, change.decimals);
+    const amount = formatEther(BigInt(change.amount) * BigInt(10 ** (18 - change.decimals)));
     const isPositive = !amount.startsWith('-');
     const formattedAmount = isPositive ? amount : amount.slice(1); // Remove negative sign
     
