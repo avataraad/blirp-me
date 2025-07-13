@@ -1,4 +1,5 @@
-import { ethers } from 'ethers';
+import { mnemonicToAccount } from 'viem/accounts';
+import { generateMnemonic, english } from '@scure/bip39';
 import * as Keychain from 'react-native-keychain';
 import { MMKV } from 'react-native-mmkv';
 
@@ -28,13 +29,14 @@ class WalletService {
     privateKey: string;
   }> {
     try {
-      // Generate random wallet
-      const wallet = ethers.Wallet.createRandom();
+      // Generate random mnemonic and derive account
+      const mnemonic = generateMnemonic(english);
+      const account = mnemonicToAccount(mnemonic);
 
       return {
-        mnemonic: wallet.mnemonic!.phrase,
-        address: wallet.address,
-        privateKey: wallet.privateKey,
+        mnemonic,
+        address: account.address,
+        privateKey: account.getHdKey().privateKey!,
       };
     } catch (error) {
       console.error('Error generating wallet:', error);
@@ -43,9 +45,16 @@ class WalletService {
   }
 
   // Derive wallet from mnemonic
-  async restoreWalletFromMnemonic(mnemonic: string): Promise<ethers.Wallet> {
+  async restoreWalletFromMnemonic(mnemonic: string): Promise<{
+    address: string;
+    privateKey: string;
+  }> {
     try {
-      return ethers.Wallet.fromMnemonic(mnemonic);
+      const account = mnemonicToAccount(mnemonic);
+      return {
+        address: account.address,
+        privateKey: account.getHdKey().privateKey!,
+      };
     } catch (error) {
       console.error('Error restoring wallet:', error);
       throw new Error('Invalid mnemonic phrase');
