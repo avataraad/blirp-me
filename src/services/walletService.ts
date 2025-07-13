@@ -2,6 +2,7 @@ import { mnemonicToAccount } from 'viem/accounts';
 import { generateMnemonic, english } from '@scure/bip39';
 import * as Keychain from 'react-native-keychain';
 import { MMKV } from 'react-native-mmkv';
+import { Buffer } from 'buffer';
 
 // Initialize MMKV for secure storage
 const storage = new MMKV({
@@ -122,9 +123,8 @@ class WalletService {
 // Encrypt data (simplified - in production use proper encryption)
 async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
     // For now, we'll use a simple base64 encoding
-    // React Native doesn't have Buffer, use btoa instead
-    const ciphertext = btoa(data);
-    const iv = btoa(Math.random().toString());
+    const ciphertext = Buffer.from(data).toString('base64');
+    const iv = Buffer.from(Math.random().toString()).toString('base64');
 
     return { ciphertext, iv };
   }
@@ -132,8 +132,7 @@ async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
   // Decrypt data
   async decryptData(encryptedData: EncryptedSeed, _key: string): Promise<string> {
     // For now, simple base64 decoding
-    // Use atob instead of Buffer
-    return atob(encryptedData.ciphertext);
+    return Buffer.from(encryptedData.ciphertext, 'base64').toString();
   }
 
   // Get balance from blockchain

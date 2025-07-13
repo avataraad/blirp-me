@@ -1,5 +1,5 @@
-import { getBlockNumber, getChainId } from 'viem/actions';
-import { mainnet } from 'viem/chains';
+import { getBlockNumber, getChainId } from '@wagmi/core';
+import { mainnet } from '@wagmi/core/chains';
 import { config } from '../config/wagmi';
 
 // Ethereum mainnet configuration

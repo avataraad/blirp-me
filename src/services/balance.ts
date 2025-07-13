@@ -1,6 +1,6 @@
 import axios from 'axios';
 import Config from 'react-native-config';
-import { getBalance } from 'viem/actions';
+import { getBalance } from '@wagmi/core';
 import { formatEther } from 'viem';
 import { config } from '../config/wagmi';
 
@@ -142,13 +142,21 @@ export const getEthBalanceFromTokens = (tokens: TokenBalance[]): TokenBalance | 
  */
 export const getEthBalance = async (address: string): Promise<string> => {
   try {
+    // Use wagmi/core for React Native
     const balance = await getBalance(config, {
-      address: address as `0x${string}`
+      address: address as `0x${string}`,
+      chainId: 1
     });
-    return formatEther(balance);
+    return formatEther(balance.value);
   } catch (error) {
     console.error('Failed to get ETH balance:', error);
-    return '0';
+    // Fallback to Moralis
+    try {
+      return await getEthBalanceFromMoralis(address);
+    } catch (fallbackError) {
+      console.error('Fallback balance fetch failed:', fallbackError);
+      return '0';
+    }
   }
 };
 

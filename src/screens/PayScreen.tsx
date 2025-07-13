@@ -23,6 +23,9 @@ import {
   SimulationResult,
 } from '../services/transactionService';
 import { getEthBalance, getEthPrice } from '../services/balance';
+import tagService from '../services/tagService';
+import { useWallet } from '../contexts/WalletContext';
+import { getAddress } from 'viem';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -34,14 +37,18 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
+  const { walletAddress: contextWalletAddress, balance: contextBalance } = useWallet();
+  
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [isResolvingTag, setIsResolvingTag] = useState(false);
   
   // Real blockchain data
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
-  const [walletAddress, setWalletAddress] = useState<string>('');
+  const walletAddress = contextWalletAddress || '';
   
   // Transaction simulation state
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
@@ -55,18 +62,28 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const loadWalletData = async () => {
       try {
-        // For demo purposes, using a hardcoded address - in real app this would come from wallet service
-        const demoAddress = '0x742d35Cc6634C0532925a3b8D37AAb63e6f3Cd55';
-        setWalletAddress(demoAddress);
-        
-        // Load balance and ETH price
-        const [balanceResult, priceResult] = await Promise.all([
-          getEthBalance(demoAddress),
-          getEthPrice(),
-        ]);
-        
-        setBalance(parseFloat(balanceResult));
-        setEthPrice(priceResult);
+        if (!walletAddress) {
+          // Use demo address if no wallet context
+          const demoAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f89590';
+          
+          // Load balance and ETH price
+          const [balanceResult, priceResult] = await Promise.all([
+            getEthBalance(demoAddress),
+            getEthPrice(),
+          ]);
+          
+          setBalance(parseFloat(balanceResult));
+          setEthPrice(priceResult);
+        } else {
+          // Use wallet context address
+          const [balanceResult, priceResult] = await Promise.all([
+            getEthBalance(walletAddress),
+            getEthPrice(),
+          ]);
+          
+          setBalance(parseFloat(balanceResult));
+          setEthPrice(priceResult);
+        }
       } catch (error) {
         console.error('Failed to load wallet data:', error);
         Alert.alert('Error', 'Failed to load wallet data');
@@ -74,7 +91,10 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     loadWalletData();
-  }, []);
+    
+    // Seed demo tags for testing
+    tagService.seedDemoTags();
+  }, [walletAddress]);
 
   // Simulate transaction when recipient and amount are valid
   const simulateTransactionDebounced = useCallback(
@@ -109,30 +129,58 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (isValidAddress && amount && !isNaN(parseFloat(amount))) {
+    if (isValidAddress && amount && !isNaN(parseFloat(amount)) && resolvedAddress) {
       // Debounce simulation calls
       const timeoutId = setTimeout(() => {
-        simulateTransactionDebounced(recipient, amount);
+        simulateTransactionDebounced(resolvedAddress, amount);
       }, 500);
       
       return () => clearTimeout(timeoutId);
     } else {
       setSimulation(null);
     }
-  }, [recipient, amount, isValidAddress, simulateTransactionDebounced]);
+  }, [resolvedAddress, amount, isValidAddress, simulateTransactionDebounced]);
 
-  const handleRecipientChange = (text: string) => {
+  const handleRecipientChange = async (text: string) => {
     setRecipient(text);
+    setResolvedAddress(null);
 
     // Validate recipient
     if (text.startsWith('@')) {
-      // @tag validation - TODO: implement tag resolution in Issue #43
-      setIsValidAddress(text.length > 3);
+      // Tag validation and resolution
+      setIsResolvingTag(true);
+      
+      try {
+        const tagValidation = tagService.validateTag(text);
+        
+        if (tagValidation.isValid) {
+          const address = await tagService.resolveTag(text);
+          
+          if (address) {
+            setResolvedAddress(address);
+            setIsValidAddress(true);
+          } else {
+            setIsValidAddress(false);
+          }
+        } else {
+          setIsValidAddress(false);
+        }
+      } catch (error) {
+        console.error('Tag resolution error:', error);
+        setIsValidAddress(false);
+      } finally {
+        setIsResolvingTag(false);
+      }
     } else if (text.startsWith('0x')) {
       // Ethereum address validation
       try {
         const isValid = isAddress(text);
         setIsValidAddress(isValid);
+        if (isValid) {
+          // Get checksummed address
+          const checksummedAddress = getAddress(text);
+          setResolvedAddress(checksummedAddress);
+        }
       } catch {
         setIsValidAddress(false);
       }
@@ -210,7 +258,7 @@ This action requires biometric authentication.`;
       
       const result = await executeTransaction({
         from: walletAddress,
-        to: recipient,
+        to: resolvedAddress || recipient,
         value: amountWei,
       });
 
@@ -286,13 +334,24 @@ This action requires biometric authentication.`;
               autoCorrect={false}
             />
             {recipient.length > 0 && isValidAddress !== null && (
-              <Icon
-                name={isValidAddress ? 'checkmark-circle' : 'close-circle'}
-                size={24}
-                color={isValidAddress ? theme.colors.success : theme.colors.danger}
-              />
+              <View style={styles.validationContainer}>
+                {isResolvingTag ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <Icon
+                    name={isValidAddress ? 'checkmark-circle' : 'close-circle'}
+                    size={24}
+                    color={isValidAddress ? theme.colors.success : theme.colors.danger}
+                  />
+                )}
+              </View>
             )}
           </View>
+          {resolvedAddress && recipient.startsWith('@') && (
+            <Text style={styles.resolvedAddress}>
+              {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
+            </Text>
+          )}
         </View>
 
         {/* Amount Input */}
@@ -556,6 +615,18 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: theme.colors.danger,
+  },
+  validationContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resolvedAddress: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.tertiary,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
   },
 });
 

@@ -11,6 +11,10 @@ const config = {
     alias: {
       // Polyfills for crypto functionality needed by viem
       'crypto': 'react-native-get-random-values',
+      'stream': 'readable-stream',
+      'buffer': 'buffer',
+      'url': 'url',
+      'text-encoding': 'text-encoding',
     },
   },
 };

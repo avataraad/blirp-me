@@ -1,7 +1,7 @@
 import axios from 'axios';
 import Config from 'react-native-config';
 import { encodeFunctionData, formatEther, parseEther, parseGwei, parseTransaction } from 'viem';
-import { estimateFeesPerGas, estimateGas, getTransactionCount, sendRawTransaction, waitForTransactionReceipt } from 'viem/actions';
+import { estimateFeesPerGas, estimateGas, getTransactionCount, sendRawTransaction, waitForTransactionReceipt } from '@wagmi/core';
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
 import * as Keychain from 'react-native-keychain';
@@ -142,8 +142,11 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
       transaction.data = buildERC20TransferData(params.to, params.tokenAmount) as `0x${string}`;
     }
 
-    // Estimate gas using viem
-    const gasEstimate = await estimateGas(config, transaction);
+    // Estimate gas using wagmi/core
+    const gasEstimate = await estimateGas(config, {
+      ...transaction,
+      chainId: 1
+    });
 
     // For now, we'll use the gas estimate since Alchemy's simulation API isn't directly supported in viem
     // In a real implementation, you might want to use tenderly or another simulation service

@@ -2,7 +2,8 @@
  * @format
  */
 
-import './src/utils/crypto-polyfill';
+// IMPORTANT: Load polyfills first, before any other imports
+import './src/utils/crypto-polyfill.ts';
 
 import {AppRegistry} from 'react-native';
 import App from './App';
