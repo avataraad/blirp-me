@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ethers } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
+import { signTransaction as viemSignTransaction } from 'viem/actions';
+import type { TransactionRequest } from 'viem';
 import walletService from '../services/walletService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
 import { createBackup } from '../modules/cloudBackup/helpers';
 
 interface WalletContextType {
-  currentWallet: ethers.Wallet | null;
+  currentPrivateKey: string | null;
   walletAddress: string | null;
   walletTag: string | null;
   balance: string;
@@ -15,7 +17,7 @@ interface WalletContextType {
   unlockWallet: (tag: string) => Promise<boolean>;
   restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
-  signTransaction: (transaction: ethers.providers.TransactionRequest) => Promise<string>;
+  signTransaction: (transaction: TransactionRequest) => Promise<string>;
   logout: () => void;
 }
 
@@ -34,7 +36,7 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const [currentWallet, setCurrentWallet] = useState<ethers.Wallet | null>(null);
+  const [currentPrivateKey, setCurrentPrivateKey] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletTag, setWalletTag] = useState<string | null>(null);
   const [balance, setBalance] = useState<string>('0.0000');
@@ -85,10 +87,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         }
       }
 
-      // Create wallet instance
-      const wallet = new ethers.Wallet(privateKey);
-
-      setCurrentWallet(wallet);
+      // Store wallet data in state
+      setCurrentPrivateKey(privateKey);
       setWalletAddress(address);
       setWalletTag(tag);
 
@@ -118,17 +118,22 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const seedOrPrivateKey = await walletService.decryptData(encryptedSeed, encryptionKey);
 
       // Restore wallet - check if it's a private key or mnemonic
-      let wallet;
+      let address: string;
+      let privateKey: string;
       if (seedOrPrivateKey.startsWith('0x') && seedOrPrivateKey.length === 66) {
         // It's a private key (from cloud restore)
-        wallet = new ethers.Wallet(seedOrPrivateKey);
+        const account = privateKeyToAccount(seedOrPrivateKey as `0x${string}`);
+        address = account.address;
+        privateKey = seedOrPrivateKey;
       } else {
         // It's a mnemonic (from original creation)
-        wallet = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
+        const walletData = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
+        address = walletData.address;
+        privateKey = walletData.privateKey;
       }
 
-      setCurrentWallet(wallet);
-      setWalletAddress(wallet.address);
+      setCurrentPrivateKey(privateKey);
+      setWalletAddress(address);
       setWalletTag(tag);
 
       // Refresh balance
@@ -158,14 +163,18 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Sign transaction
   const signTransaction = async (
-    transaction: ethers.providers.TransactionRequest
+    transaction: TransactionRequest
   ): Promise<string> => {
-    if (!currentWallet) {
+    if (!currentPrivateKey) {
       throw new Error('No wallet available');
     }
 
     try {
-      const signedTx = await currentWallet.signTransaction(transaction);
+      const account = privateKeyToAccount(currentPrivateKey as `0x${string}`);
+      const signedTx = await viemSignTransaction({
+        account,
+        ...transaction,
+      });
       return signedTx;
     } catch (error) {
       console.error('Error signing transaction:', error);
@@ -195,11 +204,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         privateKeyToUse = backupData.privateKey;
       }
 
-      // Create wallet from backup (add 0x prefix back)
+      // Create account from backup (add 0x prefix back)
       const privateKeyWithPrefix = privateKeyToUse.startsWith('0x')
         ? privateKeyToUse
         : `0x${privateKeyToUse}`;
-      const wallet = new ethers.Wallet(privateKeyWithPrefix);
+      const account = privateKeyToAccount(privateKeyWithPrefix as `0x${string}`);
 
       // For restored wallets, we'll store the private key as the "seed"
       // since we can't recover the original mnemonic
@@ -217,8 +226,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       }
 
       // Set wallet state
-      setCurrentWallet(wallet);
-      setWalletAddress(wallet.address);
+      setCurrentPrivateKey(privateKeyWithPrefix);
+      setWalletAddress(account.address);
       setWalletTag(tag);
 
       // Refresh balance
@@ -235,7 +244,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Logout
   const logout = () => {
-    setCurrentWallet(null);
+    setCurrentPrivateKey(null);
     setWalletAddress(null);
     setWalletTag(null);
     setBalance('0.0000');
@@ -245,7 +254,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   return (
     <WalletContext.Provider
       value={{
-        currentWallet,
+        currentPrivateKey,
         walletAddress,
         walletTag,
         balance,
