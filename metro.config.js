@@ -6,6 +6,13 @@ const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
  *
  * @type {import('metro-config').MetroConfig}
  */
-const config = {};
+const config = {
+  resolver: {
+    alias: {
+      // Polyfills for crypto functionality needed by viem
+      'crypto': 'react-native-get-random-values',
+    },
+  },
+};
 
 module.exports = mergeConfig(getDefaultConfig(__dirname), config);

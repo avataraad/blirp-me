@@ -22,7 +22,7 @@ import {
   convertGasToUSD,
   SimulationResult,
 } from '../services/transactionService';
-import { getEthBalance, getEthPrice } from '../services/moralisService';
+import { getEthBalance, getEthPrice } from '../services/balance';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,

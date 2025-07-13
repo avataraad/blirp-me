@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(gh project list:*)",
-      "Bash(gh project item-add:*)"
+      "Bash(gh project item-add:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
