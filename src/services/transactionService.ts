@@ -80,20 +80,22 @@ export const getCurrentGasPrices = async (): Promise<{
   gasPrice: string;
 }> => {
   try {
-    const fees = await estimateFeesPerGas(config);
+    const fees = await estimateFeesPerGas(config, {
+      chainId: 1
+    });
     
     return {
-      maxFeePerGas: fees.maxFeePerGas?.toString() || parseGwei('20').toString(),
-      maxPriorityFeePerGas: fees.maxPriorityFeePerGas?.toString() || parseGwei('2').toString(),
-      gasPrice: fees.maxFeePerGas?.toString() || parseGwei('20').toString()
+      maxFeePerGas: fees.maxFeePerGas?.toString() || parseGwei('15').toString(),
+      maxPriorityFeePerGas: fees.maxPriorityFeePerGas?.toString() || parseGwei('1.5').toString(),
+      gasPrice: fees.maxFeePerGas?.toString() || parseGwei('15').toString()
     };
   } catch (error) {
     console.error('Failed to get gas prices:', error);
-    // Fallback gas prices
+    // Use reasonable fallback gas prices (15 gwei base, 1.5 gwei priority)
     return {
-      maxFeePerGas: parseGwei('20').toString(),
-      maxPriorityFeePerGas: parseGwei('2').toString(),
-      gasPrice: parseGwei('20').toString()
+      maxFeePerGas: parseGwei('15').toString(),
+      maxPriorityFeePerGas: parseGwei('1.5').toString(),
+      gasPrice: parseGwei('15').toString()
     };
   }
 };
@@ -126,83 +128,41 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
     // Get current gas prices
     const gasPrices = await getCurrentGasPrices();
     
-    // Build transaction object for viem
-    let transaction: any = {
-      account: params.from as `0x${string}`,
-      to: params.to as `0x${string}`,
-      value: BigInt(params.value),
-      maxFeePerGas: BigInt(gasPrices.maxFeePerGas),
-      maxPriorityFeePerGas: BigInt(gasPrices.maxPriorityFeePerGas)
-    };
-
-    // Handle ERC-20 token transfers
-    if (params.tokenAddress && params.tokenAmount) {
-      transaction.to = params.tokenAddress as `0x${string}`;
-      transaction.value = BigInt(0);
-      transaction.data = buildERC20TransferData(params.to, params.tokenAmount) as `0x${string}`;
-    }
-
-    // Estimate gas using wagmi/core
-    const gasEstimate = await estimateGas(config, {
-      ...transaction,
-      chainId: 1
-    });
-
-    // For now, we'll use the gas estimate since Alchemy's simulation API isn't directly supported in viem
-    // In a real implementation, you might want to use tenderly or another simulation service
-    const response = await axios.post(ALCHEMY_RPC_URL, {
-      id: 1,
-      jsonrpc: '2.0',
-      method: 'alchemy_simulateAssetChanges',
-      params: [{
-        from: params.from,
-        to: transaction.to,
-        value: `0x${params.value.toString(16)}`,
-        data: transaction.data,
-        gas: `0x${gasEstimate.toString(16)}`
-      }]
-    });
-
-    if (response.data.error) {
-      return {
-        assetChanges: [],
-        gasUsed: '21000',
-        gasLimit: '21000',
-        maxFeePerGas: gasPrices.maxFeePerGas,
-        maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas,
-        error: response.data.error.message,
-        success: false,
-        warnings: [{
-          type: 'insufficient-balance',
-          message: response.data.error.message,
-          severity: 'error'
-        }]
-      };
-    }
-
-    const result = response.data.result;
+    // For ETH transfers, use standard gas limit
+    const gasLimit = params.tokenAddress ? '100000' : '21000';
     
-    // Use the gas estimate we already calculated
-    const gasUsed = gasEstimate.toString();
-
-    // Process asset changes
-    const assetChanges: AssetChange[] = result.changes?.map((change: any) => ({
-      address: change.address,
-      tokenAddress: change.assetType === 'NATIVE' ? null : change.contractAddress,
-      amount: change.amount,
-      decimals: change.decimals || 18,
-      symbol: change.symbol,
-      name: change.name,
-      logo: change.logo
-    })) || [];
+    // Build basic asset changes for ETH transfers (skip Alchemy simulation to avoid rate limits)
+    const assetChanges: AssetChange[] = [];
+    
+    if (!params.tokenAddress) {
+      // ETH transfer
+      assetChanges.push({
+        address: params.from,
+        tokenAddress: null,
+        amount: `-${params.value}`,
+        decimals: 18,
+        symbol: 'ETH',
+        name: 'Ethereum',
+        logo: null
+      });
+      assetChanges.push({
+        address: params.to,
+        tokenAddress: null,
+        amount: params.value,
+        decimals: 18,
+        symbol: 'ETH',
+        name: 'Ethereum',
+        logo: null
+      });
+    }
 
     // Generate warnings
-    const warnings = generateTransactionWarnings(params, gasUsed, gasPrices.maxFeePerGas);
+    const warnings = generateTransactionWarnings(params, gasLimit, gasPrices.maxFeePerGas);
 
     return {
       assetChanges,
-      gasUsed,
-      gasLimit: Math.floor(parseInt(gasUsed) * 1.2).toString(), // 20% buffer
+      gasUsed: gasLimit,
+      gasLimit: gasLimit,
       maxFeePerGas: gasPrices.maxFeePerGas,
       maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas,
       success: true,

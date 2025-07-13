@@ -114,7 +114,8 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         setSimulation(result);
         
         if (result.success) {
-          const gasWei = BigInt(result.gasUsed) * BigInt(result.maxFeePerGas);
+          // Calculate gas cost: gasLimit * maxFeePerGas
+          const gasWei = BigInt(result.gasLimit) * BigInt(result.maxFeePerGas);
           const gasUSD = await convertGasToUSD(gasWei.toString(), ethPrice);
           setGasEstimateUSD(gasUSD);
         }
@@ -221,7 +222,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       .join('\n');
 
     const gasEth = formatEther(
-      BigInt(simulation.gasUsed) * BigInt(simulation.maxFeePerGas)
+      BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
     );
 
     const confirmMessage = `
@@ -293,8 +294,8 @@ This action requires biometric authentication.`;
   // Calculate total amount including gas fees
   const gasEstimateEth = simulation && simulation.success ? 
     parseFloat(formatEther(
-      BigInt(simulation.gasUsed) * BigInt(simulation.maxFeePerGas)
-    )) : 0.001; // Fallback estimate
+      BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
+    )) : 0.0003; // Fallback estimate (~$1 at $3000 ETH)
   
   const totalAmount = amount ? parseFloat(amount) + gasEstimateEth : gasEstimateEth;
   const isInsufficientBalance = totalAmount > balance;
