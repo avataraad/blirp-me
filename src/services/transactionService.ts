@@ -1,14 +1,14 @@
-import axios from 'axios';
 import Config from 'react-native-config';
-import { encodeFunctionData, formatEther, parseEther, parseGwei, parseTransaction } from 'viem';
-import { estimateFeesPerGas, estimateGas, getTransactionCount, sendRawTransaction, waitForTransactionReceipt } from '@wagmi/core';
+import { encodeFunctionData, formatEther, parseGwei, parseTransaction, createWalletClient, http } from 'viem';
+import { estimateFeesPerGas, getTransactionCount, waitForTransactionReceipt, getPublicClient } from '@wagmi/core';
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
+import { mainnet } from '@wagmi/core/chains';
 import * as Keychain from 'react-native-keychain';
 
-// Alchemy API configuration
-const ALCHEMY_API_KEY = Config.ALCHEMY_API_KEY;
-const ALCHEMY_RPC_URL = Config.ALCHEMY_RPC_URL;
+// Alchemy API configuration (kept for reference)
+// const ALCHEMY_API_KEY = Config.ALCHEMY_API_KEY;
+// const ALCHEMY_RPC_URL = Config.ALCHEMY_RPC_URL;
 
 // Types for transaction simulation
 export interface AssetChange {
@@ -279,18 +279,37 @@ export const formatAssetChange = (change: AssetChange): {
 };
 
 /**
- * Get the wallet's private key from secure storage
+ * Get the wallet's private key from secure storage with biometric authentication
  */
-const getPrivateKeyFromSecureStorage = async (): Promise<string> => {
+const getPrivateKeyFromSecureStorage = async (params: TransactionParams): Promise<string> => {
   try {
-    const credentials = await Keychain.getInternetCredentials('blirpme_wallet');
+    // Format transaction details for the authentication prompt
+    const amountEth = formatEther(BigInt(params.value));
+    const recipientDisplay = params.to.slice(0, 6) + '...' + params.to.slice(-4);
+    
+    const credentials = await Keychain.getInternetCredentials(
+      'blirpme_wallet',
+      {
+        authenticationPrompt: {
+          title: 'Confirm Transaction',
+          subtitle: 'Authenticate to sign transaction',
+          description: `Sending ${amountEth} ETH to ${recipientDisplay}`,
+          cancel: 'Cancel'
+        }
+      }
+    );
+    
     if (!credentials || !credentials.password) {
       throw new Error('No wallet found in secure storage');
     }
+    
     return credentials.password; // The private key is stored as the password
   } catch (error) {
     console.error('Failed to retrieve private key:', error);
-    throw new Error('No wallet found in secure storage');
+    if (error.message?.includes('UserCancel')) {
+      throw new Error('Transaction cancelled by user');
+    }
+    throw new Error('Biometric authentication failed');
   }
 };
 
@@ -319,8 +338,8 @@ export const signTransaction = async (
   simulationResult: SimulationResult
 ): Promise<SignedTransaction> => {
   try {
-    // Get the private key from secure storage
-    const privateKey = await getPrivateKeyFromSecureStorage();
+    // Get the private key from secure storage with biometric auth
+    const privateKey = await getPrivateKeyFromSecureStorage(params);
     const account = privateKeyToAccount(privateKey as `0x${string}`);
     
     // Get current nonce
@@ -367,13 +386,21 @@ export const signTransaction = async (
 };
 
 /**
- * Broadcast a signed transaction to the network via Alchemy
+ * Broadcast a signed transaction to the network
  */
 export const broadcastTransaction = async (
   signedTransaction: SignedTransaction
 ): Promise<string> => {
   try {
-    const hash = await sendRawTransaction(config, {
+    // Get the public client from wagmi config
+    const publicClient = getPublicClient(config, { chainId: mainnet.id });
+    
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+    
+    // Send the raw transaction using viem's sendRawTransaction
+    const hash = await publicClient.sendRawTransaction({
       serializedTransaction: signedTransaction.rawTransaction as `0x${string}`
     });
     
@@ -418,8 +445,7 @@ export const waitForTransaction = async (
  * Complete transaction flow: simulate, sign, and broadcast
  */
 export const executeTransaction = async (
-  params: TransactionParams,
-  requireBiometric: boolean = true
+  params: TransactionParams
 ): Promise<{
   transactionHash: string;
   receipt?: TransactionReceipt;
@@ -431,26 +457,10 @@ export const executeTransaction = async (
       throw new Error(simulation.error || 'Transaction simulation failed');
     }
     
-    // Step 2: Request biometric authentication if required
-    if (requireBiometric) {
-      const biometricAuth = await Keychain.getInternetCredentials('blirpme_wallet', {
-        authenticationPrompt: {
-          title: 'Confirm Transaction',
-          subtitle: 'Authenticate to sign this transaction',
-          description: `Sending ${formatEther(BigInt(params.value))} ETH`,
-          cancel: 'Cancel'
-        }
-      });
-      
-      if (!biometricAuth) {
-        throw new Error('Biometric authentication failed');
-      }
-    }
-    
-    // Step 3: Sign the transaction
+    // Step 2: Sign the transaction (biometric auth happens inside signTransaction)
     const signedTx = await signTransaction(params, simulation);
     
-    // Step 4: Broadcast the transaction
+    // Step 3: Broadcast the transaction
     const txHash = await broadcastTransaction(signedTx);
     
     return {

@@ -37,7 +37,7 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
-  const { walletAddress: contextWalletAddress, balance: contextBalance } = useWallet();
+  const { walletAddress: contextWalletAddress } = useWallet();
   
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -63,27 +63,20 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     const loadWalletData = async () => {
       try {
         if (!walletAddress) {
-          // Use demo address if no wallet context
-          const demoAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f89590';
-          
-          // Load balance and ETH price
-          const [balanceResult, priceResult] = await Promise.all([
-            getEthBalance(demoAddress),
-            getEthPrice(),
-          ]);
-          
-          setBalance(parseFloat(balanceResult));
-          setEthPrice(priceResult);
-        } else {
-          // Use wallet context address
-          const [balanceResult, priceResult] = await Promise.all([
-            getEthBalance(walletAddress),
-            getEthPrice(),
-          ]);
-          
-          setBalance(parseFloat(balanceResult));
-          setEthPrice(priceResult);
+          // No wallet address available
+          console.error('No wallet address available');
+          Alert.alert('Error', 'Please sign in to your wallet first');
+          return;
         }
+        
+        // Load balance and ETH price
+        const [balanceResult, priceResult] = await Promise.all([
+          getEthBalance(walletAddress),
+          getEthPrice(),
+        ]);
+        
+        setBalance(parseFloat(balanceResult));
+        setEthPrice(priceResult);
       } catch (error) {
         console.error('Failed to load wallet data:', error);
         Alert.alert('Error', 'Failed to load wallet data');
@@ -250,10 +243,15 @@ This action requires biometric authentication.`;
   };
 
   const executeTransactionHandler = async () => {
-    if (!simulation || !walletAddress) return;
+    if (!simulation) return;
 
     try {
       setIsExecuting(true);
+
+      if (!walletAddress) {
+        Alert.alert('Error', 'No wallet address available');
+        return;
+      }
 
       const amountWei = parseEther(amount).toString();
       
@@ -315,10 +313,10 @@ This action requires biometric authentication.`;
         <View style={styles.balanceSection}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
           <Text style={styles.balanceAmount}>
-            {balance.toFixed(4)} ETH
-            {balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
+            {walletAddress ? balance.toFixed(4) : '0.0000'} ETH
+            {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
           </Text>
-          <Text style={styles.balanceUSD}>${balanceUSD.toFixed(2)}</Text>
+          <Text style={styles.balanceUSD}>${walletAddress ? balanceUSD.toFixed(2) : '0.00'}</Text>
         </View>
 
         {/* Recipient Input */}

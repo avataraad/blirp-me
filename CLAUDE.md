@@ -85,6 +85,17 @@ Currently uses local React state. The architecture supports adding:
 
 ## Development Guidelines
 
+**Core Workflow Rules:**
+- Use TodoWrite tool to create a structured task list for complex multi-step tasks
+- Break down the work into specific, actionable items
+- Mark only ONE task as in_progress at a time
+- Use search tools (Grep, Glob, Task) to understand the codebase
+- Read relevant files with Read tool before making any changes
+- Check for project-specific CLAUDE.md files in current/parent directories
+- Understand existing patterns, frameworks, and conventions
+- Mark todos as completed immediately after finishing each task
+- Update todo status in real-time as I work
+
 **Styling:**
 - Always use the theme system from `src/styles/theme.ts`
 - Follow the established spacing, typography, and color patterns

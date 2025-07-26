@@ -10,7 +10,8 @@
       "Bash(mkdir:*)",
       "Bash(npm run lint)",
       "Bash(npx tsc:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(npm run lint:*)"
     ],
     "deny": []
   }

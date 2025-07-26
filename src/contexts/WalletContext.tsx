@@ -2,12 +2,12 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { privateKeyToAccount } from 'viem/accounts';
 import { signTransaction as viemSignTransaction } from 'viem/actions';
 import type { TransactionRequest } from 'viem';
+import * as Keychain from 'react-native-keychain';
 import walletService from '../services/walletService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
 import { createBackup } from '../modules/cloudBackup/helpers';
 
 interface WalletContextType {
-  currentPrivateKey: string | null;
   walletAddress: string | null;
   walletTag: string | null;
   balance: string;
@@ -36,7 +36,6 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const [currentPrivateKey, setCurrentPrivateKey] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletTag, setWalletTag] = useState<string | null>(null);
   const [balance, setBalance] = useState<string>('0.0000');
@@ -72,6 +71,25 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         throw new Error('Failed to store wallet');
       }
 
+      // Store private key in secure enclave for fast transaction signing
+      try {
+        await Keychain.setInternetCredentials(
+          'blirpme_wallet',
+          address, // username is the wallet address
+          privateKey, // password is the private key
+          {
+            accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+            accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            authenticatePrompt: 'Store wallet securely'
+          }
+        );
+        console.log('Private key stored in secure enclave');
+      } catch (error) {
+        console.error('Failed to store in secure enclave:', error);
+        // Don't fail wallet creation if secure enclave storage fails
+        // The app can still work with passkey-only mode
+      }
+
       // Create cloud backup if available
       if (isCloudBackupAvailable()) {
         try {
@@ -87,8 +105,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         }
       }
 
-      // Store wallet data in state
-      setCurrentPrivateKey(privateKey);
+      // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
 
@@ -132,9 +149,29 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         privateKey = walletData.privateKey;
       }
 
-      setCurrentPrivateKey(privateKey);
+      // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
+
+      // Sync private key to secure enclave if not already there
+      try {
+        const existingCredentials = await Keychain.getInternetCredentials('blirpme_wallet');
+        if (!existingCredentials || existingCredentials.username !== address) {
+          await Keychain.setInternetCredentials(
+            'blirpme_wallet',
+            address,
+            privateKey,
+            {
+              accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+              accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+              authenticatePrompt: 'Sync wallet to secure storage'
+            }
+          );
+          console.log('Private key synced to secure enclave');
+        }
+      } catch (error) {
+        console.error('Failed to sync to secure enclave:', error);
+      }
 
       // Refresh balance
       await refreshBalance();
@@ -165,19 +202,46 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const signTransaction = async (
     transaction: TransactionRequest
   ): Promise<string> => {
-    if (!currentPrivateKey) {
+    if (!walletAddress) {
       throw new Error('No wallet available');
     }
 
     try {
-      const account = privateKeyToAccount(currentPrivateKey as `0x${string}`);
+      // Always get private key from secure enclave with biometric auth
+      const credentials = await Keychain.getInternetCredentials(
+        'blirpme_wallet',
+        {
+          authenticationPrompt: {
+            title: 'Sign Transaction',
+            subtitle: 'Authenticate to sign',
+            description: 'Your biometric is required to sign this transaction',
+            cancel: 'Cancel'
+          }
+        }
+      );
+      
+      if (!credentials || !credentials.password) {
+        throw new Error('Failed to retrieve wallet from secure storage');
+      }
+
+      const privateKey = credentials.password;
+      const account = privateKeyToAccount(privateKey as `0x${string}`);
       const signedTx = await viemSignTransaction({
         account,
         ...transaction,
       });
+      
+      // Clear the private key from memory immediately
+      // Note: This doesn't guarantee immediate memory clearing in JS,
+      // but it's the best we can do
+      Object.assign(credentials, { password: null });
+      
       return signedTx;
     } catch (error) {
       console.error('Error signing transaction:', error);
+      if (error.message?.includes('UserCancel')) {
+        throw new Error('Transaction cancelled by user');
+      }
       throw error;
     }
   };
@@ -225,10 +289,27 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         throw new Error('Failed to store wallet locally');
       }
 
-      // Set wallet state
-      setCurrentPrivateKey(privateKeyWithPrefix);
+      // Set wallet state (NOT the private key)
       setWalletAddress(account.address);
       setWalletTag(tag);
+
+      // Store private key in secure enclave for fast transaction signing
+      try {
+        await Keychain.setInternetCredentials(
+          'blirpme_wallet',
+          account.address,
+          privateKeyWithPrefix,
+          {
+            accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+            accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            authenticatePrompt: 'Store recovered wallet securely'
+          }
+        );
+        console.log('Recovered private key stored in secure enclave');
+      } catch (error) {
+        console.error('Failed to store recovered key in secure enclave:', error);
+        // Don't fail recovery if secure enclave storage fails
+      }
 
       // Refresh balance
       await refreshBalance();
@@ -244,7 +325,6 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Logout
   const logout = () => {
-    setCurrentPrivateKey(null);
     setWalletAddress(null);
     setWalletTag(null);
     setBalance('0.0000');
@@ -254,7 +334,6 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   return (
     <WalletContext.Provider
       value={{
-        currentPrivateKey,
         walletAddress,
         walletTag,
         balance,
