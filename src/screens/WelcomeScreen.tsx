@@ -5,10 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
+import { useWallet } from '../contexts/WalletContext';
+import { isCloudBackupAvailable } from '../modules/cloudBackup';
+import { restoreFromPasskey } from '../modules/cloudBackup/helpers';
 
 type WelcomeScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -20,6 +24,38 @@ type Props = {
 };
 
 const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
+  const { restoreFromCloudBackup } = useWallet();
+
+  const handleSignIn = async () => {
+    if (!isCloudBackupAvailable()) {
+      Alert.alert(
+        'Not Available',
+        'Cloud backup requires iOS 17.0 or later.',
+      );
+      return;
+    }
+
+    try {
+      // Get both private key and tag from passkey
+      const { tag, privateKey } = await restoreFromPasskey();
+
+      // Restore the wallet with the retrieved tag and private key
+      const success = await restoreFromCloudBackup(tag, privateKey);
+
+      if (success) {
+        navigation.navigate('MainTabs');
+      } else {
+        Alert.alert(
+          'Restore Failed',
+          'Could not restore wallet. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      Alert.alert('Error', 'Failed to sign in with passkey');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -43,9 +79,9 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => navigation.navigate('SignIn')}
+            onPress={handleSignIn}
           >
-            <Text style={styles.secondaryButtonText}>Sign In</Text>
+            <Text style={styles.secondaryButtonText}>Sign In with Passkey</Text>
           </TouchableOpacity>
         </View>
 
