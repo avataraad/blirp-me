@@ -11,6 +11,7 @@ import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ReceiveScreen from '../screens/ReceiveScreen';
 import PayScreen from '../screens/PayScreen';
+import SupabaseTestScreen from '../screens/SupabaseTestScreen';
 
 // Import navigation types
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
@@ -114,6 +115,11 @@ const AppNavigator = () => {
           name="MainTabs"
           component={MainTabs}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="SupabaseTest"
+          component={SupabaseTestScreen}
+          options={{ title: 'Supabase Test' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

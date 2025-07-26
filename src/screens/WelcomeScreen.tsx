@@ -90,6 +90,14 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.footerText}>
             Your keys, your crypto. Secured by your device.
           </Text>
+          
+          {/* Development: Supabase Test Button */}
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={() => navigation.navigate('SupabaseTest')}
+          >
+            <Text style={styles.devButtonText}>Test Supabase Connection</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -169,6 +177,20 @@ const styles = StyleSheet.create({
   footerText: {
     ...theme.typography.footnote,
     color: theme.colors.text.tertiary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  devButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 122, 255, 0.3)',
+  },
+  devButtonText: {
+    ...theme.typography.caption1,
+    color: theme.colors.primary,
     textAlign: 'center',
   },
 });

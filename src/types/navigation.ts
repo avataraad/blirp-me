@@ -3,6 +3,7 @@ export type RootStackParamList = {
     CreateWallet: undefined;
     SignIn: undefined;
     MainTabs: undefined;
+    SupabaseTest: undefined;
   };
 
   export type MainTabParamList = {
