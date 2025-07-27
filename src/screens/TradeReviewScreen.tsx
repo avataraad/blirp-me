@@ -23,6 +23,7 @@ import {
 } from '../services/bungeeService';
 import { executeTrade, monitorTradeExecution } from '../services/tradeExecutionService';
 import { VerifiedToken } from '../config/tokens';
+import { TokenWithBalance } from '../services/tokenService';
 import { formatEther, parseEther } from 'viem';
 import { useWallet } from '../contexts/WalletContext';
 import { startMonitoring } from '../services/transactionMonitor';

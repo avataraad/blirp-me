@@ -1,4 +1,5 @@
 import { VerifiedToken } from '../config/tokens';
+import { TokenWithBalance } from '../services/tokenService';
 
 export type RootStackParamList = {
     Welcome: undefined;
@@ -11,8 +12,8 @@ export type RootStackParamList = {
     SupabaseTest: undefined;
     TradeReview: {
       tradeMode: 'buy' | 'sell';
-      fromToken: VerifiedToken;
-      toToken: VerifiedToken;
+      fromToken: TokenWithBalance;
+      toToken: TokenWithBalance;
       amountUSD: string;
       amountWei: string;
     };

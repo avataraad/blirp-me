@@ -4,6 +4,7 @@ export const theme = {
       secondary: '#D1D1D6', // System Gray
       success: '#7DD88C', // Same as primary green
       danger: '#FF3B30', // Error Red from design system
+      destructive: '#FF3B30', // Same as danger, for compatibility
       warning: '#FF9500',
       background: '#FFFFFF', // Pure White
       surface: '#F9F9F7', // Light Gray Cards

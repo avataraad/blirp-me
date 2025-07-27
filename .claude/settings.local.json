@@ -15,7 +15,11 @@
       "Bash(npm start)",
       "Bash(npm test:*)",
       "Bash(git commit:*)",
-      "Bash(npm run ios:*)"
+      "Bash(npm run ios:*)",
+      "Bash(find:*)",
+      "Bash(git reset:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(npx react-native run-ios:*)"
     ],
     "deny": []
   }

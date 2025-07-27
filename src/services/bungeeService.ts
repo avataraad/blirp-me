@@ -6,6 +6,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { VerifiedToken } from '../config/tokens';
 import { createError, ErrorType } from './errorHandling';
+import { getMockQuote } from './mockBungeeService';
 
 // Bungee public API endpoint
 const BUNGEE_API_URL = 'https://public-backend.bungee.exchange';
@@ -127,6 +128,12 @@ export const getBungeeQuote = async (
   userAddress: string,
   slippage: number = 1
 ): Promise<BungeeQuoteResponse> => {
+  // TODO: Remove this when Bungee API is properly configured
+  // For now, use mock service due to 404 errors
+  if (true) {
+    return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
+  }
+  
   try {
     const params: BungeeQuoteRequest = {
       fromChainId: ETHEREUM_CHAIN_ID,
@@ -154,6 +161,15 @@ export const getBungeeQuote = async (
           'Invalid trade parameters. Please check your input.',
           error.response.data?.message || 'Invalid quote request',
           error
+        );
+      }
+      if (error.response?.status === 404) {
+        throw createError(
+          ErrorType.SERVICE_UNAVAILABLE,
+          'Trading service endpoint not found. Service may be temporarily unavailable.',
+          'Bungee API endpoint returned 404',
+          error,
+          true
         );
       }
       if (error.response?.status === 429) {
@@ -226,6 +242,16 @@ export const buildBungeeTransaction = async (
   userAddress: string,
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
+  // TODO: Remove mock when API is configured
+  if (true) {
+    return {
+      to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
+      data: '0x' + '0'.repeat(64), // Mock transaction data
+      value: '0',
+      gasLimit: '200000',
+      chainId: 1
+    };
+  }
   try {
     const params: BungeeTransactionRequest = {
       routeId,
@@ -264,6 +290,17 @@ export const buildBungeeTransaction = async (
 export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
+  // TODO: Remove mock when API is configured
+  if (true) {
+    return {
+      status: 'COMPLETED',
+      transactionHash,
+      fromAmount: '1000000000000000000',
+      toAmount: '3800000000',
+      error: undefined
+    };
+  }
+  
   try {
     const params: BungeeStatusRequest = {
       transactionHash,

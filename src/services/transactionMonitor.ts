@@ -4,7 +4,7 @@
  */
 
 import { TransactionReceipt } from './transactionService';
-import { checkBungeeTransactionStatus, BungeeTransactionStatus } from './bungeeService';
+import { checkBungeeTransactionStatus, BungeeStatusResponse } from './bungeeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
