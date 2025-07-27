@@ -14,6 +14,50 @@ jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
 // Mock react-native-qrcode-svg
 jest.mock('react-native-qrcode-svg', () => 'QRCode');
 
+// Mock react-native-config
+jest.mock('react-native-config', () => ({
+  MORALIS_API_KEY: 'test-moralis-key',
+  ALCHEMY_API_KEY: 'test-alchemy-key',
+  ALCHEMY_RPC_URL: 'https://eth-mainnet.g.alchemy.com/v2/test',
+  SUPABASE_URL: 'https://test.supabase.co',
+  SUPABASE_PUBLISHABLE_KEY: 'test-key'
+}));
+
+// Mock @wagmi/core
+jest.mock('@wagmi/core', () => ({
+  getBalance: jest.fn(),
+  estimateFeesPerGas: jest.fn(),
+  getTransactionCount: jest.fn(),
+  waitForTransactionReceipt: jest.fn(),
+  getPublicClient: jest.fn()
+}));
+
+// Mock viem
+jest.mock('viem', () => ({
+  formatEther: jest.fn((val) => '1.0'),
+  parseEther: jest.fn((val) => BigInt(1000000000000000000)),
+  parseGwei: jest.fn((val) => BigInt(1000000000)),
+  createWalletClient: jest.fn(),
+  http: jest.fn(),
+  encodeFunctionData: jest.fn(),
+  parseTransaction: jest.fn(),
+  isAddress: jest.fn(() => true),
+  getAddress: jest.fn((addr) => addr)
+}));
+
+// Mock viem/accounts
+jest.mock('viem/accounts', () => ({
+  privateKeyToAccount: jest.fn()
+}));
+
+// Mock wagmi config  
+jest.mock('./src/config/wagmi', () => ({
+  config: {}
+}));
+
+// Mock axios
+jest.mock('axios');
+
 // Mock CloudBackup native module
 jest.mock('react-native', () => {
   const RN = jest.requireActual('react-native');
