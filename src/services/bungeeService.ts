@@ -130,7 +130,7 @@ export const getBungeeQuote = async (
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
   // For now, use mock service due to 404 errors
-  if (true) {
+  if (false) {
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
   
@@ -146,7 +146,7 @@ export const getBungeeQuote = async (
       isIntra: true, // Single chain swap on Ethereum
     };
 
-    const response = await bungeeApi.get('/quote', { params });
+    const response = await bungeeApi.get('/api/v1/bungee/quote', { params });
     
     if (!response.data || !response.data.routes || response.data.routes.length === 0) {
       throw new Error('No routes available for this trade');
@@ -243,7 +243,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
       data: '0x' + '0'.repeat(64), // Mock transaction data
@@ -260,7 +260,7 @@ export const buildBungeeTransaction = async (
       slippage,
     };
 
-    const response = await bungeeApi.post('/build-tx', params);
+    const response = await bungeeApi.post('/api/v1/bungee/build-tx', params);
     
     if (!response.data || !response.data.to || !response.data.data) {
       throw new Error('Invalid transaction response');
@@ -291,7 +291,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       status: 'COMPLETED',
       transactionHash,
@@ -308,7 +308,7 @@ export const checkBungeeTransactionStatus = async (
       toChainId: ETHEREUM_CHAIN_ID,
     };
 
-    const response = await bungeeApi.get('/status', { params });
+    const response = await bungeeApi.get('/api/v1/bungee/status', { params });
     return response.data;
   } catch (error) {
     console.error('Bungee status check error:', error);
