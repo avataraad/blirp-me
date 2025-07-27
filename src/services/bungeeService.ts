@@ -5,6 +5,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { VerifiedToken } from '../config/tokens';
+import { createError, ErrorType } from './errorHandling';
 
 // Bungee public API endpoint
 const BUNGEE_API_URL = 'https://public-backend.bungee.exchange';
@@ -148,18 +149,50 @@ export const getBungeeQuote = async (
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 400) {
-        throw new Error(error.response.data?.message || 'Invalid quote request');
+        throw createError(
+          ErrorType.INVALID_AMOUNT,
+          'Invalid trade parameters. Please check your input.',
+          error.response.data?.message || 'Invalid quote request',
+          error
+        );
       }
       if (error.response?.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again later.');
+        throw createError(
+          ErrorType.SERVICE_UNAVAILABLE,
+          'Too many requests. Please try again in a moment.',
+          'Rate limit exceeded',
+          error,
+          true
+        );
       }
-      if (error.response?.status === 500) {
-        throw new Error('Bungee service temporarily unavailable');
+      if (error.response?.status === 500 || error.response?.status === 503) {
+        throw createError(
+          ErrorType.SERVICE_UNAVAILABLE,
+          'Trading service temporarily unavailable. Please try again later.',
+          'Bungee service error',
+          error,
+          true
+        );
+      }
+      if (!error.response) {
+        throw createError(
+          ErrorType.NETWORK_ERROR,
+          'Unable to connect to trading service. Check your internet connection.',
+          'Network request failed',
+          error,
+          true
+        );
       }
     }
     
     console.error('Bungee quote error:', error);
-    throw new Error('Failed to fetch quote');
+    throw createError(
+      ErrorType.QUOTE_FAILED,
+      'Failed to fetch quote. Please try again.',
+      'Unknown quote error',
+      error instanceof Error ? error : undefined,
+      true
+    );
   }
 };
 

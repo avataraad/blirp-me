@@ -23,10 +23,15 @@ import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWi
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
 import { estimateTradeGas, TradeGasEstimate } from '../services/tradeGasEstimation';
+import { parseEther, parseUnits } from 'viem';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../types/navigation';
+import { parseError, showErrorAlert } from '../services/errorHandling';
 
-type TradeScreenNavigationProp = BottomTabNavigationProp<
-  MainTabParamList,
-  'Trade'
+type TradeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Trade'>,
+  StackNavigationProp<RootStackParamList>
 >;
 
 type Props = {
@@ -77,7 +82,8 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         setSelectedToken(firstWithBalance || null);
       }
     } catch (error) {
-      console.error('Failed to load tokens:', error);
+      const appError = parseError(error);
+      showErrorAlert(appError, () => loadTokensAndPrices());
     } finally {
       setIsLoadingTokens(false);
     }
@@ -119,6 +125,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
       setGasEstimate(estimate);
     } catch (error) {
       console.error('Failed to estimate gas:', error);
+      // Don't show alert for gas estimation errors - just log them
     } finally {
       setIsEstimatingGas(false);
     }
@@ -180,13 +187,46 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   
   const isReviewDisabled = () => {
     if (!amountUSD || parseFloat(amountUSD) <= 0) return true;
+    if (!selectedToken) return true;
     
     if (tradeMode === 'buy') {
       return parseFloat(amountUSD) > parseFloat(getMaxBuyAmount());
     } else {
-      if (!selectedToken) return true;
       return parseFloat(amountUSD) > parseFloat(getMaxSellAmount());
     }
+  };
+  
+  const handleReviewTrade = () => {
+    if (!selectedToken || !amountUSD) return;
+    
+    // Calculate amount in wei
+    let amountWei: string;
+    const usdAmount = parseFloat(amountUSD);
+    
+    if (tradeMode === 'buy') {
+      // For buying, we need to calculate ETH amount from USD
+      amountWei = parseEther((usdAmount / ethPrice).toString()).toString();
+    } else {
+      // For selling, convert token amount to smallest unit
+      const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
+      amountWei = parseUnits(tokenAmount.toString(), selectedToken.decimals).toString();
+    }
+    
+    // Get the tokens for the trade
+    const ethToken = tokens.find(t => t.isNative);
+    if (!ethToken) return;
+    
+    const fromToken = tradeMode === 'buy' ? ethToken : selectedToken;
+    const toToken = tradeMode === 'buy' ? selectedToken : ethToken;
+    
+    // Navigate to review screen
+    navigation.navigate('TradeReview', {
+      tradeMode,
+      fromToken,
+      toToken,
+      amountUSD,
+      amountWei
+    });
   };
   
   const renderTokenItem = ({ item }: { item: TokenWithBalance }) => {
@@ -372,6 +412,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.reviewButton, isReviewDisabled() && styles.reviewButtonDisabled]}
             disabled={isReviewDisabled()}
+            onPress={handleReviewTrade}
           >
             <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
               Review Trade

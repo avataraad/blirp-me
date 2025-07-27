@@ -14,6 +14,7 @@ import HomeScreen from '../screens/HomeScreen';
 import ReceiveScreen from '../screens/ReceiveScreen';
 import PayScreen from '../screens/PayScreen';
 import TradeScreen from '../screens/TradeScreen';
+import TradeReviewScreen from '../screens/TradeReviewScreen';
 import SupabaseTestScreen from '../screens/SupabaseTestScreen';
 
 // Import navigation types
@@ -136,6 +137,11 @@ const AppNavigator = () => {
           name="MainTabs"
           component={MainTabs}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="TradeReview"
+          component={TradeReviewScreen}
+          options={{ title: 'Review Trade' }}
         />
         <Stack.Screen
           name="SupabaseTest"

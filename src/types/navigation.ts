@@ -1,3 +1,5 @@
+import { VerifiedToken } from '../config/tokens';
+
 export type RootStackParamList = {
     Welcome: undefined;
     PhoneNumber: undefined;
@@ -7,6 +9,13 @@ export type RootStackParamList = {
     SignIn: undefined;
     MainTabs: undefined;
     SupabaseTest: undefined;
+    TradeReview: {
+      tradeMode: 'buy' | 'sell';
+      fromToken: VerifiedToken;
+      toToken: VerifiedToken;
+      amountUSD: string;
+      amountWei: string;
+    };
   };
 
   export type MainTabParamList = {

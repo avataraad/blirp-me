@@ -1,10 +1,11 @@
 import 'react-native-url-polyfill/auto';
 import './src/utils/crypto-polyfill';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppNavigator from './src/navigation/AppNavigator';
 import { WalletProvider } from './src/contexts/WalletContext';
+import { resumeMonitoring, clearOldTransactions } from './src/services/transactionMonitor';
 
 console.log('App.tsx: Starting app');
 
@@ -12,6 +13,23 @@ console.log('App.tsx: Starting app');
 const queryClient = new QueryClient();
 
 const App = () => {
+  useEffect(() => {
+    // Initialize transaction monitoring on app startup
+    const initializeMonitoring = async () => {
+      try {
+        // Clear old transactions
+        await clearOldTransactions();
+        
+        // Resume monitoring for pending transactions
+        await resumeMonitoring();
+      } catch (error) {
+        console.error('Failed to initialize transaction monitoring:', error);
+      }
+    };
+    
+    initializeMonitoring();
+  }, []);
+  
   return (
     <QueryClientProvider client={queryClient}>
       <WalletProvider>
