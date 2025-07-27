@@ -165,19 +165,57 @@ export const getBungeeQuote = async (
     
     console.log('Bungee API response:', JSON.stringify(response.data, null, 2));
     
-    if (!response.data || !response.data.routes || response.data.routes.length === 0) {
-      // Log more details about why no routes were found
-      console.error('No routes found. Response data:', response.data);
+    // Check if we got a successful response
+    if (!response.data || !response.data.success || !response.data.result) {
+      console.error('Invalid response from Bungee API:', response.data);
       throw createError(
         ErrorType.QUOTE_FAILED,
-        'No routes available for this trade. Try a different token pair or amount.',
-        'No routes returned from Bungee API',
+        'Failed to get quote from Bungee API',
+        'Invalid response structure',
         undefined,
         true
       );
     }
 
-    return response.data;
+    // Transform the response to match our expected structure
+    const result = response.data.result;
+    const transformedResponse: BungeeQuoteResponse = {
+      routes: [{
+        routeId: result.quoteId || 'bungee-route',
+        fromAmount: result.input.amount,
+        toAmount: result.output.amount,
+        estimatedGas: '200000', // Default estimate
+        estimatedGasFeesInUsd: parseFloat(result.gasFee || '10'),
+        routePath: ['Bungee Protocol'],
+        exchangeRate: parseFloat(result.output.priceInUsd) / parseFloat(result.input.priceInUsd),
+        priceImpact: -0.3, // Default impact
+        slippage: parseFloat(result.slippage || '1.5'),
+        bridgeFee: 0,
+        bridgeFeeInUsd: 0,
+        outputAmountMin: result.minAmountOut || result.output.amount,
+        executionDuration: parseInt(result.estimatedTime || '10')
+      }],
+      fromToken: {
+        address: result.input.token.address,
+        symbol: result.input.token.symbol,
+        decimals: result.input.token.decimals,
+        name: result.input.token.name,
+        logoURI: result.input.token.logoURI || result.input.token.icon
+      },
+      toToken: {
+        address: result.output.token.address,
+        symbol: result.output.token.symbol,
+        decimals: result.output.token.decimals,
+        name: result.output.token.name,
+        logoURI: result.output.token.logoURI || result.output.token.icon
+      },
+      fromAmount: result.input.amount,
+      toAmount: result.output.amount,
+      estimatedGas: '200000',
+      status: 'success'
+    };
+
+    return transformedResponse;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 400) {
