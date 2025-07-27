@@ -101,13 +101,13 @@ export interface BungeeStatusResponse {
 }
 
 // Native ETH address representation in Bungee
-const NATIVE_ETH_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+const NATIVE_ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 /**
  * Convert token address for Bungee API (handle native ETH)
  */
 const getBungeeTokenAddress = (token: VerifiedToken): string => {
-  return token.isNative ? NATIVE_ETH_ADDRESS : token.address.toLowerCase();
+  return token.isNative ? NATIVE_ETH_ADDRESS : token.address;
 };
 
 /**
@@ -163,8 +163,18 @@ export const getBungeeQuote = async (
 
     const response = await bungeeApi.get('/api/v1/bungee/quote', { params });
     
+    console.log('Bungee API response:', JSON.stringify(response.data, null, 2));
+    
     if (!response.data || !response.data.routes || response.data.routes.length === 0) {
-      throw new Error('No routes available for this trade');
+      // Log more details about why no routes were found
+      console.error('No routes found. Response data:', response.data);
+      throw createError(
+        ErrorType.QUOTE_FAILED,
+        'No routes available for this trade. Try a different token pair or amount.',
+        'No routes returned from Bungee API',
+        undefined,
+        true
+      );
     }
 
     return response.data;
