@@ -30,6 +30,7 @@ export interface BungeeQuoteRequest {
   outputToken: string;      // Token address
   inputAmount: string;      // Amount in smallest unit (wei)
   userAddress: string;      // User's wallet address
+  receiverAddress: string;  // Receiver's wallet address (can be same as userAddress)
   slippage?: number;        // Slippage tolerance (default 1%)
 }
 
@@ -127,8 +128,9 @@ export const getBungeeQuote = async (
   slippage: number = 1
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
-  // For now, use mock service due to 404 errors
-  if (false) {
+  // For now, use mock service due to parameter validation errors
+  if (true) {
+    console.log('Using mock service while Bungee API parameters are being debugged');
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
   
@@ -151,6 +153,7 @@ export const getBungeeQuote = async (
       outputToken: getBungeeTokenAddress(toToken),
       inputAmount: amountWei,
       userAddress: userAddress,
+      receiverAddress: userAddress, // Same as userAddress for same-chain swaps
       slippage: slippage,
     };
 
@@ -171,6 +174,11 @@ export const getBungeeQuote = async (
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 400) {
         console.error('Bungee 400 error details:', error.response.data);
+        console.error('Request that failed:', {
+          url: error.config?.url,
+          params: error.config?.params,
+          method: error.config?.method
+        });
         const apiMessage = error.response.data?.message || error.response.data?.error || 'Invalid quote request';
         throw createError(
           ErrorType.INVALID_AMOUNT,
@@ -259,7 +267,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     return {
       to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
       data: '0x' + '0'.repeat(64), // Mock transaction data
@@ -306,7 +314,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     return {
       status: 'COMPLETED',
       transactionHash,
