@@ -24,14 +24,13 @@ export const bungeeApi: AxiosInstance = axios.create({
 const ETHEREUM_CHAIN_ID = 1;
 
 export interface BungeeQuoteRequest {
-  originChainId: number;
-  destinationChainId: number;
-  inputToken: string;       // Token address (0xeeee...eeee for native ETH)
-  outputToken: string;      // Token address
-  inputAmount: string;      // Amount in smallest unit (wei)
-  userAddress: string;      // User's wallet address
-  receiverAddress: string;  // Receiver's wallet address (can be same as userAddress)
-  slippage?: number;        // Slippage tolerance (default 1%)
+  userAddress: string;      // Sender wallet address
+  originChainId: number;    // Source chain ID
+  destinationChainId: number; // Destination chain ID
+  inputToken: string;       // Address of the input token (0xeeee...eeee for native ETH)
+  inputAmount: string;      // Input amount in wei
+  receiverAddress: string;  // Receiver wallet address
+  outputToken: string;      // Output token address
 }
 
 export interface BungeeQuoteResponse {
@@ -129,7 +128,7 @@ export const getBungeeQuote = async (
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
   // For now, use mock service due to parameter validation errors
-  if (true) {
+  if (false) {
     console.log('Using mock service while Bungee API parameters are being debugged');
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
@@ -147,14 +146,13 @@ export const getBungeeQuote = async (
     }
 
     const params = {
+      userAddress: userAddress,
       originChainId: ETHEREUM_CHAIN_ID,
       destinationChainId: ETHEREUM_CHAIN_ID,
       inputToken: getBungeeTokenAddress(fromToken),
-      outputToken: getBungeeTokenAddress(toToken),
       inputAmount: amountWei,
-      userAddress: userAddress,
       receiverAddress: userAddress, // Same as userAddress for same-chain swaps
-      slippage: slippage,
+      outputToken: getBungeeTokenAddress(toToken),
     };
 
     console.log('Bungee API request params:', JSON.stringify(params, null, 2));
@@ -267,7 +265,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
       data: '0x' + '0'.repeat(64), // Mock transaction data
@@ -314,7 +312,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       status: 'COMPLETED',
       transactionHash,
