@@ -24,14 +24,13 @@ export const bungeeApi: AxiosInstance = axios.create({
 const ETHEREUM_CHAIN_ID = 1;
 
 export interface BungeeQuoteRequest {
-  fromChainId: number;
-  toChainId: number;
+  originChainId: number;
+  destinationChainId: number;
   fromToken: string;        // Token address (0xeeee...eeee for native ETH)
   toToken: string;          // Token address
   fromAmount: string;       // Amount in smallest unit (wei)
   fromAddress: string;      // User's wallet address
   slippage?: number;        // Slippage tolerance (default 1%)
-  isIntra?: boolean;        // Single chain swap
 }
 
 export interface BungeeQuoteResponse {
@@ -88,8 +87,8 @@ export interface BungeeTransactionResponse {
 
 export interface BungeeStatusRequest {
   transactionHash: string;
-  fromChainId: number;
-  toChainId: number;
+  originChainId: number;
+  destinationChainId: number;
 }
 
 export interface BungeeStatusResponse {
@@ -135,16 +134,32 @@ export const getBungeeQuote = async (
   }
   
   try {
-    const params: BungeeQuoteRequest = {
-      fromChainId: ETHEREUM_CHAIN_ID,
-      toChainId: ETHEREUM_CHAIN_ID,
+    // Validate inputs
+    if (!userAddress || !amountWei || amountWei === '0') {
+      throw createError(
+        ErrorType.INVALID_AMOUNT,
+        'Invalid trade amount or wallet address',
+        'Missing required parameters',
+        undefined,
+        false
+      );
+    }
+
+    const params = {
+      originChainId: ETHEREUM_CHAIN_ID,
+      destinationChainId: ETHEREUM_CHAIN_ID,
       fromToken: getBungeeTokenAddress(fromToken),
       toToken: getBungeeTokenAddress(toToken),
       fromAmount: amountWei,
       fromAddress: userAddress,
-      slippage,
-      isIntra: true, // Single chain swap on Ethereum
+      slippage: slippage,
     };
+
+    console.log('Bungee API request params:', JSON.stringify(params, null, 2));
+    console.log('From token:', fromToken.symbol, 'Address:', getBungeeTokenAddress(fromToken));
+    console.log('To token:', toToken.symbol, 'Address:', getBungeeTokenAddress(toToken));
+    console.log('Amount Wei:', amountWei);
+    console.log('Request URL:', `${BUNGEE_API_URL}/api/v1/bungee/quote`);
 
     const response = await bungeeApi.get('/api/v1/bungee/quote', { params });
     
@@ -156,10 +171,12 @@ export const getBungeeQuote = async (
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 400) {
+        console.error('Bungee 400 error details:', error.response.data);
+        const apiMessage = error.response.data?.message || error.response.data?.error || 'Invalid quote request';
         throw createError(
           ErrorType.INVALID_AMOUNT,
-          'Invalid trade parameters. Please check your input.',
-          error.response.data?.message || 'Invalid quote request',
+          `Invalid trade parameters: ${apiMessage}`,
+          apiMessage,
           error
         );
       }
@@ -304,8 +321,8 @@ export const checkBungeeTransactionStatus = async (
   try {
     const params: BungeeStatusRequest = {
       transactionHash,
-      fromChainId: ETHEREUM_CHAIN_ID,
-      toChainId: ETHEREUM_CHAIN_ID,
+      originChainId: ETHEREUM_CHAIN_ID,
+      destinationChainId: ETHEREUM_CHAIN_ID,
     };
 
     const response = await bungeeApi.get('/api/v1/bungee/status', { params });
