@@ -1,5 +1,6 @@
+import 'react-native-get-random-values';
 import { mnemonicToAccount } from 'viem/accounts';
-import { generateMnemonic, english } from '@scure/bip39';
+import { privateKeyToAccount } from 'viem/accounts';
 import * as Keychain from 'react-native-keychain';
 import { MMKV } from 'react-native-mmkv';
 import { Buffer } from 'buffer';
@@ -23,21 +24,26 @@ export interface EncryptedSeed {
 }
 
 class WalletService {
-  // Generate a new wallet with mnemonic phrase
+  // Generate a new wallet with private key
   async generateWallet(): Promise<{
     mnemonic: string;
     address: string;
     privateKey: string;
   }> {
     try {
-      // Generate random mnemonic and derive account
-      const mnemonic = generateMnemonic(english);
-      const account = mnemonicToAccount(mnemonic);
+      // Generate cryptographically secure random private key
+      const randomBytes = new Uint8Array(32);
+      crypto.getRandomValues(randomBytes);
+      
+      const privateKey = `0x${Buffer.from(randomBytes).toString('hex')}` as `0x${string}`;
+      
+      // Create account from private key
+      const account = privateKeyToAccount(privateKey);
 
       return {
-        mnemonic,
+        mnemonic: '', // We'll skip mnemonic for now to avoid wordlist issues
         address: account.address,
-        privateKey: account.getHdKey().privateKey!,
+        privateKey,
       };
     } catch (error) {
       console.error('Error generating wallet:', error);

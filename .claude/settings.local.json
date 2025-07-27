@@ -11,7 +11,8 @@
       "Bash(npm run lint)",
       "Bash(npx tsc:*)",
       "Bash(git add:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(npm start)"
     ],
     "deny": []
   }

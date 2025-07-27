@@ -72,7 +72,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('CreateWallet')}
+            onPress={() => navigation.navigate('PhoneNumber')}
           >
             <Text style={styles.primaryButtonText}>Create New Wallet</Text>
           </TouchableOpacity>

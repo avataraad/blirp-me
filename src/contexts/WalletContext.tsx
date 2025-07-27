@@ -4,16 +4,23 @@ import { signTransaction as viemSignTransaction } from 'viem/actions';
 import type { TransactionRequest } from 'viem';
 import * as Keychain from 'react-native-keychain';
 import walletService from '../services/walletService';
+import userProfileService from '../services/userProfileService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
 import { createBackup } from '../modules/cloudBackup/helpers';
+
+interface WalletData {
+  address: string;
+  tag: string;
+}
 
 interface WalletContextType {
   walletAddress: string | null;
   walletTag: string | null;
+  wallet: WalletData | null;
   balance: string;
   balanceInUSD: number;
   isLoading: boolean;
-  createWallet: (tag: string) => Promise<boolean>;
+  createWallet: (tag: string) => Promise<{ success: boolean; wallet?: WalletData }>;
   unlockWallet: (tag: string) => Promise<boolean>;
   restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
@@ -38,17 +45,18 @@ interface WalletProviderProps {
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletTag, setWalletTag] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<WalletData | null>(null);
   const [balance, setBalance] = useState<string>('0.0000');
   const [balanceInUSD, setBalanceInUSD] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Create new wallet
-  const createWallet = async (tag: string): Promise<boolean> => {
+  const createWallet = async (tag: string): Promise<{ success: boolean; wallet?: WalletData }> => {
     try {
       setIsLoading(true);
 
-      // Check if tag is available
-      const isAvailable = await walletService.isTagAvailable(tag);
+      // Check if tag is available in user profiles table
+      const isAvailable = await userProfileService.isTagAvailable(tag);
       if (!isAvailable) {
         throw new Error('Tag already taken');
       }
@@ -105,14 +113,18 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         }
       }
 
+      // Create wallet data object
+      const walletData: WalletData = { address, tag };
+
       // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
+      setWallet(walletData);
 
-      return true;
+      return { success: true, wallet: walletData };
     } catch (error) {
       console.error('Error creating wallet:', error);
-      return false;
+      return { success: false };
     } finally {
       setIsLoading(false);
     }
@@ -152,6 +164,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
+      setWallet({ address, tag });
 
       // Sync private key to secure enclave if not already there
       try {
@@ -292,6 +305,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       // Set wallet state (NOT the private key)
       setWalletAddress(account.address);
       setWalletTag(tag);
+      setWallet({ address: account.address, tag });
 
       // Store private key in secure enclave for fast transaction signing
       try {
@@ -327,6 +341,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const logout = () => {
     setWalletAddress(null);
     setWalletTag(null);
+    setWallet(null);
     setBalance('0.0000');
     setBalanceInUSD(0);
   };
@@ -336,6 +351,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       value={{
         walletAddress,
         walletTag,
+        wallet,
         balance,
         balanceInUSD,
         isLoading,

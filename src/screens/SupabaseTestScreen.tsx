@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { theme } from '../styles/theme';
 import supabaseService from '../services/supabaseService';
+import userProfileService from '../services/userProfileService';
 
 const SupabaseTestScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -71,11 +72,54 @@ const SupabaseTestScreen: React.FC = () => {
     setIsLoading(false);
   };
 
+  const testUserProfiles = async () => {
+    setIsLoading(true);
+    try {
+      const success = await userProfileService.testConnection();
+      addResult('User Profiles Table', {
+        success,
+        message: success ? 'User profiles table accessible!' : 'User profiles table not found - needs to be created',
+      });
+    } catch (error) {
+      addResult('User Profiles Table', {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    setIsLoading(false);
+  };
+
+  const testCreateProfile = async () => {
+    setIsLoading(true);
+    try {
+      const testProfile = await userProfileService.createProfile({
+        tag: 'testuser123',
+        phone_number: '+1234567890',
+        ethereum_address: '0x742d35Cc6634C0532925a3b8D2c6d5c5B1c1b8c2',
+        display_name: 'Test User',
+      });
+
+      addResult('Create Test Profile', {
+        success: !!testProfile,
+        profile: testProfile,
+        message: testProfile ? 'Test profile created successfully!' : 'Failed to create test profile',
+      });
+    } catch (error) {
+      addResult('Create Test Profile', {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    setIsLoading(false);
+  };
+
   const runAllTests = async () => {
     setResults([]);
     await testConnection();
     await getDatabaseInfo();
     await testBasicOperations();
+    await testUserProfiles();
+    await testCreateProfile();
     
     Alert.alert('Tests Complete', 'Check the results below for details.');
   };
@@ -130,6 +174,22 @@ const SupabaseTestScreen: React.FC = () => {
               disabled={isLoading}
             >
               <Text style={styles.buttonText}>Test Operations</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={testUserProfiles}
+              disabled={isLoading}
+            >
+              <Text style={styles.buttonText}>Test User Profiles</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={testCreateProfile}
+              disabled={isLoading}
+            >
+              <Text style={styles.buttonText}>Test Create Profile</Text>
             </TouchableOpacity>
           </View>
         </View>

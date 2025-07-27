@@ -1,3 +1,5 @@
+import 'react-native-url-polyfill/auto';
+import './src/utils/crypto-polyfill';
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
