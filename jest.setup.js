@@ -32,6 +32,15 @@ jest.mock('@wagmi/core', () => ({
   getPublicClient: jest.fn()
 }));
 
+// Mock @wagmi/core/chains
+jest.mock('@wagmi/core/chains', () => ({
+  mainnet: {
+    id: 1,
+    name: 'Ethereum',
+    network: 'mainnet'
+  }
+}));
+
 // Mock viem
 jest.mock('viem', () => ({
   formatEther: jest.fn((val) => '1.0'),

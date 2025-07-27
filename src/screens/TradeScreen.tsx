@@ -22,6 +22,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWithBalance } from '../services/tokenService';
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
+import { estimateTradeGas, TradeGasEstimate } from '../services/tradeGasEstimation';
 
 type TradeScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -45,8 +46,8 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const [showTokenSelector, setShowTokenSelector] = useState(false);
   const [amountUSD, setAmountUSD] = useState('');
   const [ethPrice, setEthPrice] = useState<number>(0);
-  const [gasEstimateETH, setGasEstimateETH] = useState<string>('0.0001');
-  const [gasEstimateUSD, setGasEstimateUSD] = useState<string>('0.00');
+  const [gasEstimate, setGasEstimate] = useState<TradeGasEstimate | null>(null);
+  const [isEstimatingGas, setIsEstimatingGas] = useState(false);
   
   // Load tokens and prices
   useEffect(() => {
@@ -97,11 +98,31 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [amountUSD, selectedToken]);
   
-  // Update gas estimate in USD
+  // Update gas estimate when trade parameters change
   useEffect(() => {
-    const gasUSD = parseFloat(gasEstimateETH) * ethPrice;
-    setGasEstimateUSD(gasUSD.toFixed(2));
-  }, [gasEstimateETH, ethPrice]);
+    if (selectedToken && ethPrice > 0) {
+      updateGasEstimate();
+    }
+  }, [selectedToken, tradeMode, ethPrice]);
+  
+  const updateGasEstimate = async () => {
+    if (!selectedToken) return;
+    
+    setIsEstimatingGas(true);
+    try {
+      const estimate = await estimateTradeGas(
+        tradeMode,
+        selectedToken,
+        ethPrice,
+        false // We don't have approval checking yet
+      );
+      setGasEstimate(estimate);
+    } catch (error) {
+      console.error('Failed to estimate gas:', error);
+    } finally {
+      setIsEstimatingGas(false);
+    }
+  };
   
   // Get ETH balance
   const ethToken = tokens.find(t => t.isNative);
@@ -113,20 +134,20 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     
     if (selectedToken.isNative) {
       // For ETH, subtract gas costs
-      const gasUSD = parseFloat(gasEstimateUSD);
+      const gasUSD = parseFloat(gasEstimate?.totalGasUSD || '0');
       const maxUSD = Math.max(0, (selectedToken.usdValue || 0) - gasUSD);
       return maxUSD.toFixed(2);
     }
     
     return (selectedToken.usdValue || 0).toFixed(2);
-  }, [selectedToken, gasEstimateUSD]);
+  }, [selectedToken, gasEstimate]);
   
   // Calculate max amount for buying (ETH balance minus gas)
   const getMaxBuyAmount = useCallback(() => {
-    const gasUSD = parseFloat(gasEstimateUSD);
+    const gasUSD = parseFloat(gasEstimate?.totalGasUSD || '0');
     const maxUSD = Math.max(0, ethBalance - gasUSD);
     return maxUSD.toFixed(2);
-  }, [ethBalance, gasEstimateUSD]);
+  }, [ethBalance, gasEstimate]);
   
   const handleMaxPress = () => {
     if (tradeMode === 'buy') {
@@ -310,10 +331,25 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Network Fee</Text>
               <View style={styles.detailValue}>
-                <Text style={styles.detailValueText}>${gasEstimateUSD}</Text>
-                <Text style={styles.detailValueSubtext}>~{gasEstimateETH} ETH</Text>
+                {isEstimatingGas ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : gasEstimate ? (
+                  <>
+                    <Text style={styles.detailValueText}>${gasEstimate.totalGasUSD}</Text>
+                    <Text style={styles.detailValueSubtext}>~{gasEstimate.totalGasETH} ETH</Text>
+                  </>
+                ) : (
+                  <Text style={styles.detailValueText}>-</Text>
+                )}
               </View>
             </View>
+            
+            {gasEstimate?.requiresApproval && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Token Approval</Text>
+                <Text style={styles.detailValueSubtext}>Required</Text>
+              </View>
+            )}
             
             {tradeMode === 'buy' && (
               <View style={styles.detailRow}>
