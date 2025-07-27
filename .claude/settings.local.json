@@ -19,7 +19,8 @@
       "Bash(find:*)",
       "Bash(git reset:*)",
       "Bash(xcodebuild:*)",
-      "Bash(npx react-native run-ios:*)"
+      "Bash(npx react-native run-ios:*)",
+      "WebFetch(domain:docs.bungee.exchange)"
     ],
     "deny": []
   }

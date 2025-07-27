@@ -26,10 +26,10 @@ const ETHEREUM_CHAIN_ID = 1;
 export interface BungeeQuoteRequest {
   originChainId: number;
   destinationChainId: number;
-  fromToken: string;        // Token address (0xeeee...eeee for native ETH)
-  toToken: string;          // Token address
-  fromAmount: string;       // Amount in smallest unit (wei)
-  fromAddress: string;      // User's wallet address
+  inputToken: string;       // Token address (0xeeee...eeee for native ETH)
+  outputToken: string;      // Token address
+  inputAmount: string;      // Amount in smallest unit (wei)
+  userAddress: string;      // User's wallet address
   slippage?: number;        // Slippage tolerance (default 1%)
 }
 
@@ -71,8 +71,7 @@ export interface TokenInfo {
 
 export interface BungeeTransactionRequest {
   routeId: string;
-  fromAddress: string;
-  toAddress: string;
+  userAddress: string;
   slippage?: number;
 }
 
@@ -148,10 +147,10 @@ export const getBungeeQuote = async (
     const params = {
       originChainId: ETHEREUM_CHAIN_ID,
       destinationChainId: ETHEREUM_CHAIN_ID,
-      fromToken: getBungeeTokenAddress(fromToken),
-      toToken: getBungeeTokenAddress(toToken),
-      fromAmount: amountWei,
-      fromAddress: userAddress,
+      inputToken: getBungeeTokenAddress(fromToken),
+      outputToken: getBungeeTokenAddress(toToken),
+      inputAmount: amountWei,
+      userAddress: userAddress,
       slippage: slippage,
     };
 
@@ -272,12 +271,11 @@ export const buildBungeeTransaction = async (
   try {
     const params: BungeeTransactionRequest = {
       routeId,
-      fromAddress: userAddress,
-      toAddress: userAddress, // Same address for single chain swaps
+      userAddress,
       slippage,
     };
 
-    const response = await bungeeApi.post('/api/v1/bungee/build-tx', params);
+    const response = await bungeeApi.post('/api/v1/bungee/submit', params);
     
     if (!response.data || !response.data.to || !response.data.data) {
       throw new Error('Invalid transaction response');
@@ -325,7 +323,7 @@ export const checkBungeeTransactionStatus = async (
       destinationChainId: ETHEREUM_CHAIN_ID,
     };
 
-    const response = await bungeeApi.get('/api/v1/bungee/status', { params });
+    const response = await bungeeApi.get('/api/v1/bungee/req-status', { params });
     return response.data;
   } catch (error) {
     console.error('Bungee status check error:', error);
