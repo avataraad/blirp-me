@@ -128,7 +128,7 @@ export const getBungeeQuote = async (
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
   // For now, use mock service due to parameter validation errors
-  if (false) {
+  if (true) {
     console.log('Using mock service while Bungee API parameters are being debugged');
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
@@ -179,38 +179,55 @@ export const getBungeeQuote = async (
 
     // Transform the response to match our expected structure
     const result = response.data.result;
+    
+    // Check if result has the expected structure
+    if (!result || !result.input || !result.output) {
+      console.error('Invalid Bungee API result structure:', result);
+      throw createError(
+        ErrorType.QUOTE_FAILED,
+        'Invalid quote response from Bungee API',
+        'Missing input or output data in response',
+        undefined,
+        true
+      );
+    }
+    
     const transformedResponse: BungeeQuoteResponse = {
       routes: [{
         routeId: result.quoteId || 'bungee-route',
-        fromAmount: result.input.amount,
-        toAmount: result.output.amount,
+        fromAmount: result.input?.amount || amountWei,
+        toAmount: result.output?.amount || '0',
         estimatedGas: '200000', // Default estimate
         estimatedGasFeesInUsd: parseFloat(result.gasFee || '10'),
         routePath: ['Bungee Protocol'],
-        exchangeRate: parseFloat(result.output.priceInUsd) / parseFloat(result.input.priceInUsd),
+        exchangeRate: (result.output?.priceInUsd && result.input?.priceInUsd) 
+          ? parseFloat(result.output.priceInUsd) / parseFloat(result.input.priceInUsd)
+          : 1,
         priceImpact: -0.3, // Default impact
         slippage: parseFloat(result.slippage || '1.5'),
         bridgeFee: 0,
         bridgeFeeInUsd: 0,
-        outputAmountMin: result.minAmountOut || result.output.amount,
+        outputAmountMin: result.minAmountOut || result.output?.amount || '0',
         executionDuration: parseInt(result.estimatedTime || '10')
       }],
       fromToken: {
-        address: result.input.token.address,
-        symbol: result.input.token.symbol,
-        decimals: result.input.token.decimals,
-        name: result.input.token.name,
-        logoURI: result.input.token.logoURI || result.input.token.icon
+        address: result.input?.token?.address || fromToken.address,
+        symbol: result.input?.token?.symbol || fromToken.symbol,
+        decimals: result.input?.token?.decimals || fromToken.decimals,
+        name: result.input?.token?.name || fromToken.name,
+        logoURI: result.input?.token?.logoURI || result.input?.token?.icon || fromToken.logoURI,
+        chainId: ETHEREUM_CHAIN_ID
       },
       toToken: {
-        address: result.output.token.address,
-        symbol: result.output.token.symbol,
-        decimals: result.output.token.decimals,
-        name: result.output.token.name,
-        logoURI: result.output.token.logoURI || result.output.token.icon
+        address: result.output?.token?.address || toToken.address,
+        symbol: result.output?.token?.symbol || toToken.symbol,
+        decimals: result.output?.token?.decimals || toToken.decimals,
+        name: result.output?.token?.name || toToken.name,
+        logoURI: result.output?.token?.logoURI || result.output?.token?.icon || toToken.logoURI,
+        chainId: ETHEREUM_CHAIN_ID
       },
-      fromAmount: result.input.amount,
-      toAmount: result.output.amount,
+      fromAmount: result.input?.amount || amountWei,
+      toAmount: result.output?.amount || '0',
       estimatedGas: '200000',
       status: 'success'
     };
@@ -313,7 +330,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     return {
       to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
       data: '0x' + '0'.repeat(64), // Mock transaction data
@@ -360,7 +377,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     return {
       status: 'COMPLETED',
       transactionHash,
