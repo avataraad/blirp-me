@@ -49,9 +49,9 @@ Each screen follows this pattern:
 The app is designed around these service patterns (currently unimplemented):
 
 **Blockchain Services (`src/services/`):**
-- Wallet management with ethers.js
-- Transaction handling and gas estimation
-- Network switching and configuration
+- Wallet management with wagmi and viem
+- Transaction handling and gas estimation via viem actions
+- Network configuration through wagmi providers
 
 **Security Services:**
 - react-native-keychain integration for secure storage
@@ -67,13 +67,15 @@ Currently uses local React state. The architecture supports adding:
 ## Key Implementation Areas
 
 **Wallet Integration:**
-- The app uses ethers.js 5.7.2 for Ethereum functionality
+- The app uses wagmi and viem for Ethereum functionality
 - Secure storage via react-native-keychain for private keys
 - Tag system maps @usernames to Ethereum addresses
+- Wagmi configuration provides unified blockchain access
 
 **Payment Flow:**
 - Pay screen supports both @tags and 0x addresses
-- Real-time balance checking and gas estimation needed
+- Real-time balance checking via wagmi getBalance
+- Gas estimation using viem's estimateGas actions
 - Transaction confirmation with biometric approval
 
 **Security Model:**
@@ -82,6 +84,17 @@ Currently uses local React state. The architecture supports adding:
 - Secure enclave storage for sensitive data
 
 ## Development Guidelines
+
+**Core Workflow Rules:**
+- Use TodoWrite tool to create a structured task list for complex multi-step tasks
+- Break down the work into specific, actionable items
+- Mark only ONE task as in_progress at a time
+- Use search tools (Grep, Glob, Task) to understand the codebase
+- Read relevant files with Read tool before making any changes
+- Check for project-specific CLAUDE.md files in current/parent directories
+- Understand existing patterns, frameworks, and conventions
+- Mark todos as completed immediately after finishing each task
+- Update todo status in real-time as I work
 
 **Styling:**
 - Always use the theme system from `src/styles/theme.ts`
@@ -99,9 +112,10 @@ Currently uses local React state. The architecture supports adding:
 - Use proper prop interfaces and React.FC typing
 
 **Services:**
-- Implement blockchain services in `src/services/`
-- Use async/await patterns for blockchain calls
-- Implement proper error handling for network requests
+- Implement blockchain services in `src/services/` using wagmi/viem
+- Use async/await patterns for viem actions
+- Leverage wagmi's built-in error handling and retry logic
+- Use viem utilities for address validation and amount formatting
 
 ## Technology Stack Notes
 
@@ -111,7 +125,9 @@ Currently uses local React state. The architecture supports adding:
 - React Navigation 7.x for routing
 
 **Blockchain:**
-- ethers.js 5.7.2 for Ethereum integration
+- wagmi 2.x and viem for Ethereum integration
+- @wagmi/core for React Native compatibility
+- @tanstack/react-query for state management
 - Currently supports Ethereum mainnet architecture
 
 **UI Libraries:**

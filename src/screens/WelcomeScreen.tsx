@@ -5,10 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
+import { useWallet } from '../contexts/WalletContext';
+import { isCloudBackupAvailable } from '../modules/cloudBackup';
+import { restoreFromPasskey } from '../modules/cloudBackup/helpers';
 
 type WelcomeScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -20,6 +24,38 @@ type Props = {
 };
 
 const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
+  const { restoreFromCloudBackup } = useWallet();
+
+  const handleSignIn = async () => {
+    if (!isCloudBackupAvailable()) {
+      Alert.alert(
+        'Not Available',
+        'Cloud backup requires iOS 17.0 or later.',
+      );
+      return;
+    }
+
+    try {
+      // Get both private key and tag from passkey
+      const { tag, privateKey } = await restoreFromPasskey();
+
+      // Restore the wallet with the retrieved tag and private key
+      const success = await restoreFromCloudBackup(tag, privateKey);
+
+      if (success) {
+        navigation.navigate('MainTabs');
+      } else {
+        Alert.alert(
+          'Restore Failed',
+          'Could not restore wallet. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('Sign in error:', error);
+      Alert.alert('Error', 'Failed to sign in with passkey');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -36,16 +72,16 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('CreateWallet')}
+            onPress={() => navigation.navigate('PhoneNumber')}
           >
             <Text style={styles.primaryButtonText}>Create New Wallet</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => navigation.navigate('SignIn')}
+            onPress={handleSignIn}
           >
-            <Text style={styles.secondaryButtonText}>Sign In</Text>
+            <Text style={styles.secondaryButtonText}>Sign In with Passkey</Text>
           </TouchableOpacity>
         </View>
 
@@ -54,6 +90,14 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.footerText}>
             Your keys, your crypto. Secured by your device.
           </Text>
+          
+          {/* Development: Supabase Test Button */}
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={() => navigation.navigate('SupabaseTest')}
+          >
+            <Text style={styles.devButtonText}>Test Supabase Connection</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -133,6 +177,20 @@ const styles = StyleSheet.create({
   footerText: {
     ...theme.typography.footnote,
     color: theme.colors.text.tertiary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  devButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 122, 255, 0.3)',
+  },
+  devButtonText: {
+    ...theme.typography.caption1,
+    color: theme.colors.primary,
     textAlign: 'center',
   },
 });

@@ -1,21 +1,30 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ethers } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
+import { signTransaction as viemSignTransaction } from 'viem/actions';
+import type { TransactionRequest } from 'viem';
+import * as Keychain from 'react-native-keychain';
 import walletService from '../services/walletService';
+import userProfileService from '../services/userProfileService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
 import { createBackup } from '../modules/cloudBackup/helpers';
 
+interface WalletData {
+  address: string;
+  tag: string;
+}
+
 interface WalletContextType {
-  currentWallet: ethers.Wallet | null;
   walletAddress: string | null;
   walletTag: string | null;
+  wallet: WalletData | null;
   balance: string;
   balanceInUSD: number;
   isLoading: boolean;
-  createWallet: (tag: string) => Promise<boolean>;
+  createWallet: (tag: string) => Promise<{ success: boolean; wallet?: WalletData }>;
   unlockWallet: (tag: string) => Promise<boolean>;
   restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
-  signTransaction: (transaction: ethers.providers.TransactionRequest) => Promise<string>;
+  signTransaction: (transaction: TransactionRequest) => Promise<string>;
   logout: () => void;
 }
 
@@ -34,20 +43,20 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const [currentWallet, setCurrentWallet] = useState<ethers.Wallet | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletTag, setWalletTag] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<WalletData | null>(null);
   const [balance, setBalance] = useState<string>('0.0000');
   const [balanceInUSD, setBalanceInUSD] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Create new wallet
-  const createWallet = async (tag: string): Promise<boolean> => {
+  const createWallet = async (tag: string): Promise<{ success: boolean; wallet?: WalletData }> => {
     try {
       setIsLoading(true);
 
-      // Check if tag is available
-      const isAvailable = await walletService.isTagAvailable(tag);
+      // Check if tag is available in user profiles table
+      const isAvailable = await userProfileService.isTagAvailable(tag);
       if (!isAvailable) {
         throw new Error('Tag already taken');
       }
@@ -70,6 +79,25 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         throw new Error('Failed to store wallet');
       }
 
+      // Store private key in secure enclave for fast transaction signing
+      try {
+        await Keychain.setInternetCredentials(
+          'blirpme_wallet',
+          address, // username is the wallet address
+          privateKey, // password is the private key
+          {
+            accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+            accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            authenticatePrompt: 'Store wallet securely'
+          }
+        );
+        console.log('Private key stored in secure enclave');
+      } catch (error) {
+        console.error('Failed to store in secure enclave:', error);
+        // Don't fail wallet creation if secure enclave storage fails
+        // The app can still work with passkey-only mode
+      }
+
       // Create cloud backup if available
       if (isCloudBackupAvailable()) {
         try {
@@ -85,17 +113,18 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         }
       }
 
-      // Create wallet instance
-      const wallet = new ethers.Wallet(privateKey);
+      // Create wallet data object
+      const walletData: WalletData = { address, tag };
 
-      setCurrentWallet(wallet);
+      // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
+      setWallet(walletData);
 
-      return true;
+      return { success: true, wallet: walletData };
     } catch (error) {
       console.error('Error creating wallet:', error);
-      return false;
+      return { success: false };
     } finally {
       setIsLoading(false);
     }
@@ -118,18 +147,44 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const seedOrPrivateKey = await walletService.decryptData(encryptedSeed, encryptionKey);
 
       // Restore wallet - check if it's a private key or mnemonic
-      let wallet;
+      let address: string;
+      let privateKey: string;
       if (seedOrPrivateKey.startsWith('0x') && seedOrPrivateKey.length === 66) {
         // It's a private key (from cloud restore)
-        wallet = new ethers.Wallet(seedOrPrivateKey);
+        const account = privateKeyToAccount(seedOrPrivateKey as `0x${string}`);
+        address = account.address;
+        privateKey = seedOrPrivateKey;
       } else {
         // It's a mnemonic (from original creation)
-        wallet = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
+        const walletData = await walletService.restoreWalletFromMnemonic(seedOrPrivateKey);
+        address = walletData.address;
+        privateKey = walletData.privateKey;
       }
 
-      setCurrentWallet(wallet);
-      setWalletAddress(wallet.address);
+      // Store wallet data in state (NOT the private key)
+      setWalletAddress(address);
       setWalletTag(tag);
+      setWallet({ address, tag });
+
+      // Sync private key to secure enclave if not already there
+      try {
+        const existingCredentials = await Keychain.getInternetCredentials('blirpme_wallet');
+        if (!existingCredentials || existingCredentials.username !== address) {
+          await Keychain.setInternetCredentials(
+            'blirpme_wallet',
+            address,
+            privateKey,
+            {
+              accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+              accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+              authenticatePrompt: 'Sync wallet to secure storage'
+            }
+          );
+          console.log('Private key synced to secure enclave');
+        }
+      } catch (error) {
+        console.error('Failed to sync to secure enclave:', error);
+      }
 
       // Refresh balance
       await refreshBalance();
@@ -158,17 +213,48 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Sign transaction
   const signTransaction = async (
-    transaction: ethers.providers.TransactionRequest
+    transaction: TransactionRequest
   ): Promise<string> => {
-    if (!currentWallet) {
+    if (!walletAddress) {
       throw new Error('No wallet available');
     }
 
     try {
-      const signedTx = await currentWallet.signTransaction(transaction);
+      // Always get private key from secure enclave with biometric auth
+      const credentials = await Keychain.getInternetCredentials(
+        'blirpme_wallet',
+        {
+          authenticationPrompt: {
+            title: 'Sign Transaction',
+            subtitle: 'Authenticate to sign',
+            description: 'Your biometric is required to sign this transaction',
+            cancel: 'Cancel'
+          }
+        }
+      );
+      
+      if (!credentials || !credentials.password) {
+        throw new Error('Failed to retrieve wallet from secure storage');
+      }
+
+      const privateKey = credentials.password;
+      const account = privateKeyToAccount(privateKey as `0x${string}`);
+      const signedTx = await viemSignTransaction({
+        account,
+        ...transaction,
+      });
+      
+      // Clear the private key from memory immediately
+      // Note: This doesn't guarantee immediate memory clearing in JS,
+      // but it's the best we can do
+      Object.assign(credentials, { password: null });
+      
       return signedTx;
     } catch (error) {
       console.error('Error signing transaction:', error);
+      if (error.message?.includes('UserCancel')) {
+        throw new Error('Transaction cancelled by user');
+      }
       throw error;
     }
   };
@@ -195,11 +281,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         privateKeyToUse = backupData.privateKey;
       }
 
-      // Create wallet from backup (add 0x prefix back)
+      // Create account from backup (add 0x prefix back)
       const privateKeyWithPrefix = privateKeyToUse.startsWith('0x')
         ? privateKeyToUse
         : `0x${privateKeyToUse}`;
-      const wallet = new ethers.Wallet(privateKeyWithPrefix);
+      const account = privateKeyToAccount(privateKeyWithPrefix as `0x${string}`);
 
       // For restored wallets, we'll store the private key as the "seed"
       // since we can't recover the original mnemonic
@@ -216,10 +302,28 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         throw new Error('Failed to store wallet locally');
       }
 
-      // Set wallet state
-      setCurrentWallet(wallet);
-      setWalletAddress(wallet.address);
+      // Set wallet state (NOT the private key)
+      setWalletAddress(account.address);
       setWalletTag(tag);
+      setWallet({ address: account.address, tag });
+
+      // Store private key in secure enclave for fast transaction signing
+      try {
+        await Keychain.setInternetCredentials(
+          'blirpme_wallet',
+          account.address,
+          privateKeyWithPrefix,
+          {
+            accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
+            accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            authenticatePrompt: 'Store recovered wallet securely'
+          }
+        );
+        console.log('Recovered private key stored in secure enclave');
+      } catch (error) {
+        console.error('Failed to store recovered key in secure enclave:', error);
+        // Don't fail recovery if secure enclave storage fails
+      }
 
       // Refresh balance
       await refreshBalance();
@@ -235,9 +339,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
 
   // Logout
   const logout = () => {
-    setCurrentWallet(null);
     setWalletAddress(null);
     setWalletTag(null);
+    setWallet(null);
     setBalance('0.0000');
     setBalanceInUSD(0);
   };
@@ -245,9 +349,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   return (
     <WalletContext.Provider
       value={{
-        currentWallet,
         walletAddress,
         walletTag,
+        wallet,
         balance,
         balanceInUSD,
         isLoading,

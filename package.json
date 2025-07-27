@@ -10,12 +10,21 @@
     "test": "jest"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "@noble/secp256k1": "^2.3.0",
     "@react-native-clipboard/clipboard": "^1.16.2",
     "@react-navigation/bottom-tabs": "^7.3.14",
     "@react-navigation/native": "^7.1.10",
     "@react-navigation/stack": "^7.3.3",
+    "@scure/bip32": "^1.7.0",
+    "@scure/bip39": "^1.6.0",
+    "@supabase/supabase-js": "^2.52.1",
+    "@tanstack/react-query": "^5.83.0",
+    "@wagmi/core": "^2.17.3",
     "axios": "^1.10.0",
-    "ethers": "^5.7.2",
+    "buffer": "^6.0.3",
+    "event-target-polyfill": "^0.0.4",
+    "process": "^0.11.10",
     "react": "18.3.1",
     "react-native": "0.75.4",
     "react-native-config": "^1.5.5",
@@ -30,7 +39,13 @@
     "react-native-safe-area-context": "^5.4.1",
     "react-native-screens": "^4.11.1",
     "react-native-svg": "^15.12.0",
-    "react-native-vector-icons": "^10.2.0"
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-vector-icons": "^10.2.0",
+    "readable-stream": "^3.6.2",
+    "text-encoding": "^0.7.0",
+    "url": "^0.11.4",
+    "viem": "^2.31.7",
+    "wagmi": "^2.15.6"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,53 +12,150 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import { useWallet } from '../contexts/WalletContext';
 import walletService from '../services/walletService';
+import userProfileService from '../services/userProfileService';
 
 type CreateWalletScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
-  'CreateWallet'
+  'CreateWallet' | 'CreateWalletTag'
 >;
+
+type CreateWalletScreenRouteProp = RouteProp<RootStackParamList, 'CreateWalletTag'>;
 
 type Props = {
   navigation: CreateWalletScreenNavigationProp;
+  route?: CreateWalletScreenRouteProp;
 };
 
-const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
+const CreateWalletScreen: React.FC<Props> = ({ navigation, route }) => {
   const [tag, setTag] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
-  const { createWallet, isLoading } = useWallet();
+  const { createWallet, isLoading, wallet } = useWallet();
+  
+  // Get phone numbers from route params (if coming from phone number screen)
+  const phoneNumber = route?.params?.phoneNumber; // Formatted for display
+  const e164PhoneNumber = route?.params?.e164PhoneNumber; // E.164 format for database
+  
+  // Ref for debouncing tag availability checks
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleTagChange = async (text: string) => {
+  // Debounced tag availability check
+  const checkTagAvailability = useCallback(async (tagToCheck: string) => {
+    if (tagToCheck.length < 3) {
+      setIsAvailable(null);
+      setIsChecking(false);
+      return;
+    }
+
+    setIsChecking(true);
+    try {
+      const available = await userProfileService.isTagAvailable(tagToCheck);
+      setIsAvailable(available);
+      console.log(`Tag "${tagToCheck}" availability:`, available);
+    } catch (error) {
+      console.error('Error checking tag availability:', error);
+      setIsAvailable(false);
+    } finally {
+      setIsChecking(false);
+    }
+  }, []);
+
+  const handleTagChange = (text: string) => {
     // Remove @ if user types it, only allow alphanumeric and underscore
     const cleanedTag = text.replace(/[@\s]/g, '').toLowerCase();
     setTag(cleanedTag);
 
-    // Reset availability check
+    // Clear previous timeout
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    // Reset state immediately
+    setIsAvailable(null);
+    setIsChecking(false);
+
+    // Debounce the availability check (500ms delay)
     if (cleanedTag.length >= 3) {
       setIsChecking(true);
-      // Check availability against service
-      const available = await walletService.isTagAvailable(cleanedTag);
-      setIsAvailable(available);
-      setIsChecking(false);
-    } else {
-      setIsAvailable(null);
+      checkTimeoutRef.current = setTimeout(() => {
+        checkTagAvailability(cleanedTag);
+      }, 500);
     }
   };
 
   const handleCreateWallet = async () => {
-    if (!isAvailable || tag.length < 3) {
-      Alert.alert('Invalid Tag', 'Please choose a valid tag with at least 3 characters.');
+    // Validate tag before proceeding
+    if (tag.length < 3) {
+      Alert.alert('Invalid Tag', 'Please choose a tag with at least 3 characters.');
       return;
     }
 
-    // Create the actual wallet
-    const success = await createWallet(tag);
+    if (!isAvailable) {
+      Alert.alert(
+        'Tag Not Available',
+        `The tag "@${tag}" is already taken. Please choose a different tag.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
-    if (success) {
+    try {
+      console.log('🔄 Starting wallet creation process...');
+      
+      // Create the actual wallet
+      const result = await createWallet(tag);
+
+      if (!result.success) {
+        Alert.alert('Error', 'Failed to create wallet. Please try again.');
+        return;
+      }
+
+      console.log('✅ Wallet created successfully:', result.wallet);
+
+      // If we have phone number and wallet data, create user profile
+      if (e164PhoneNumber && result.wallet) {
+        console.log('📱 Attempting to create user profile with:', {
+          tag,
+          phoneNumber: e164PhoneNumber,
+          walletAddress: result.wallet.address,
+        });
+
+        try {
+          const profile = await userProfileService.createProfile({
+            tag,
+            phone_number: e164PhoneNumber, // Use E.164 format for database
+            ethereum_address: result.wallet.address,
+            display_name: tag,
+          });
+
+          if (profile) {
+            console.log('✅ User profile created successfully:', profile);
+          } else {
+            console.warn('⚠️ User profile creation returned null');
+          }
+        } catch (profileError) {
+          console.error('❌ User profile creation failed:', profileError);
+          // Show a warning but don't fail the entire flow
+          Alert.alert(
+            'Profile Creation Failed',
+            'Your wallet was created successfully, but we couldn\'t create your user profile. You can try again later.',
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        console.log('⚠️ Missing data for profile creation:', {
+          hasPhoneNumber: !!e164PhoneNumber,
+          hasWallet: !!result.wallet,
+          phoneNumber: phoneNumber,
+          e164PhoneNumber: e164PhoneNumber
+        });
+      }
+
       Alert.alert(
         'Wallet Created!',
         'Your wallet has been created and secured with your device biometrics.',
@@ -69,11 +166,9 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
           },
         ]
       );
-    } else {
-      Alert.alert(
-        'Error',
-        'Failed to create wallet. Please try again.',
-      );
+    } catch (error) {
+      console.error('❌ Wallet creation error:', error);
+      Alert.alert('Error', 'Failed to create wallet. Please try again.');
     }
   };
 
@@ -111,8 +206,10 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.checkingText}>Checking...</Text>
                 ) : isAvailable ? (
                   <Text style={styles.availableText}>✓ Available</Text>
-                ) : (
+                ) : tag.length < 3 ? (
                   <Text style={styles.unavailableText}>✗ Too short</Text>
+                ) : (
+                  <Text style={styles.unavailableText}>✗ Already taken</Text>
                 )}
               </View>
             )}

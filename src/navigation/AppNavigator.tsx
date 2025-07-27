@@ -6,11 +6,14 @@ import Icon from 'react-native-vector-icons/Ionicons';
 
 // Import screens (we'll create these next)
 import WelcomeScreen from '../screens/WelcomeScreen';
+import PhoneNumberScreen from '../screens/PhoneNumberScreen';
+import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
 import CreateWalletScreen from '../screens/CreateWalletScreen';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ReceiveScreen from '../screens/ReceiveScreen';
 import PayScreen from '../screens/PayScreen';
+import SupabaseTestScreen from '../screens/SupabaseTestScreen';
 
 // Import navigation types
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
@@ -101,9 +104,24 @@ const AppNavigator = () => {
           options={{ headerShown: false }}
         />
         <Stack.Screen
+          name="PhoneNumber"
+          component={PhoneNumberScreen}
+          options={{ title: 'Phone Number' }}
+        />
+        <Stack.Screen
+          name="PhoneVerification"
+          component={PhoneVerificationScreen}
+          options={{ title: 'Verify Phone' }}
+        />
+        <Stack.Screen
           name="CreateWallet"
           component={CreateWalletScreen}
           options={{ title: 'Create Wallet' }}
+        />
+        <Stack.Screen
+          name="CreateWalletTag"
+          component={CreateWalletScreen}
+          options={{ title: 'Choose Tag' }}
         />
         <Stack.Screen
           name="SignIn"
@@ -114,6 +132,11 @@ const AppNavigator = () => {
           name="MainTabs"
           component={MainTabs}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="SupabaseTest"
+          component={SupabaseTestScreen}
+          options={{ title: 'Supabase Test' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

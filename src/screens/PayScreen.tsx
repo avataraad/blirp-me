@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,23 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { isAddress, parseEther, formatEther } from 'viem';
+import {
+  simulateTransaction,
+  executeTransaction,
+  convertGasToUSD,
+  SimulationResult,
+} from '../services/transactionService';
+import { getEthBalance, getEthPrice } from '../services/balance';
+import tagService from '../services/tagService';
+import { useWallet } from '../contexts/WalletContext';
+import { getAddress } from 'viem';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -25,24 +37,147 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
+  const { walletAddress: contextWalletAddress } = useWallet();
+  
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [isResolvingTag, setIsResolvingTag] = useState(false);
+  
+  // Real blockchain data
+  const [balance, setBalance] = useState<number>(0);
+  const [ethPrice, setEthPrice] = useState<number>(1900);
+  const walletAddress = contextWalletAddress || '';
+  
+  // Transaction simulation state
+  const [simulation, setSimulation] = useState<SimulationResult | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [gasEstimateUSD, setGasEstimateUSD] = useState<string>('0.00');
+  
+  // Transaction execution state
+  const [isExecuting, setIsExecuting] = useState(false);
 
-  // Mock balance - will be replaced with real data
-  const balance = 0.1234;
-  const balanceUSD = 234.56;
-  const gasEstimate = 0.001;
-  // const gasEstimateUSD = 1.90;
+  // Load wallet data on component mount
+  useEffect(() => {
+    const loadWalletData = async () => {
+      try {
+        if (!walletAddress) {
+          // No wallet address available
+          console.error('No wallet address available');
+          Alert.alert('Error', 'Please sign in to your wallet first');
+          return;
+        }
+        
+        // Load balance and ETH price
+        const [balanceResult, priceResult] = await Promise.all([
+          getEthBalance(walletAddress),
+          getEthPrice(),
+        ]);
+        
+        setBalance(parseFloat(balanceResult));
+        setEthPrice(priceResult);
+      } catch (error) {
+        console.error('Failed to load wallet data:', error);
+        Alert.alert('Error', 'Failed to load wallet data');
+      }
+    };
 
-  const handleRecipientChange = (text: string) => {
+    loadWalletData();
+    
+    // Seed demo tags for testing
+    tagService.seedDemoTags();
+  }, [walletAddress]);
+
+  // Simulate transaction when recipient and amount are valid
+  const simulateTransactionDebounced = useCallback(
+    async (recipientAddr: string, amountEth: string) => {
+      if (!recipientAddr || !amountEth || !walletAddress) return;
+      
+      try {
+        setIsSimulating(true);
+        const amountWei = parseEther(amountEth).toString();
+        
+        const result = await simulateTransaction({
+          from: walletAddress,
+          to: recipientAddr,
+          value: amountWei,
+        });
+        
+        setSimulation(result);
+        
+        if (result.success) {
+          // Calculate gas cost: gasLimit * maxFeePerGas
+          const gasWei = BigInt(result.gasLimit) * BigInt(result.maxFeePerGas);
+          const gasUSD = await convertGasToUSD(gasWei.toString(), ethPrice);
+          setGasEstimateUSD(gasUSD);
+        }
+      } catch (error) {
+        console.error('Simulation failed:', error);
+        setSimulation(null);
+      } finally {
+        setIsSimulating(false);
+      }
+    },
+    [walletAddress, ethPrice]
+  );
+
+  useEffect(() => {
+    if (isValidAddress && amount && !isNaN(parseFloat(amount)) && resolvedAddress) {
+      // Debounce simulation calls
+      const timeoutId = setTimeout(() => {
+        simulateTransactionDebounced(resolvedAddress, amount);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSimulation(null);
+    }
+  }, [resolvedAddress, amount, isValidAddress, simulateTransactionDebounced]);
+
+  const handleRecipientChange = async (text: string) => {
     setRecipient(text);
+    setResolvedAddress(null);
 
-    // Simple validation for demo
+    // Validate recipient
     if (text.startsWith('@')) {
-      setIsValidAddress(text.length > 3);
+      // Tag validation and resolution
+      setIsResolvingTag(true);
+      
+      try {
+        const tagValidation = tagService.validateTag(text);
+        
+        if (tagValidation.isValid) {
+          const address = await tagService.resolveTag(text);
+          
+          if (address) {
+            setResolvedAddress(address);
+            setIsValidAddress(true);
+          } else {
+            setIsValidAddress(false);
+          }
+        } else {
+          setIsValidAddress(false);
+        }
+      } catch (error) {
+        console.error('Tag resolution error:', error);
+        setIsValidAddress(false);
+      } finally {
+        setIsResolvingTag(false);
+      }
     } else if (text.startsWith('0x')) {
-      setIsValidAddress(text.length === 42);
+      // Ethereum address validation
+      try {
+        const isValid = isAddress(text);
+        setIsValidAddress(isValid);
+        if (isValid) {
+          // Get checksummed address
+          const checksummedAddress = getAddress(text);
+          setResolvedAddress(checksummedAddress);
+        }
+      } catch {
+        setIsValidAddress(false);
+      }
     } else {
       setIsValidAddress(null);
     }
@@ -57,7 +192,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     setAmount(cleaned);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!isValidAddress) {
       Alert.alert('Invalid Recipient', 'Please enter a valid tag or Ethereum address.');
       return;
@@ -68,28 +203,101 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (parseFloat(amount) + gasEstimate > balance) {
-      Alert.alert('Insufficient Balance', 'You don\'t have enough ETH to complete this transaction.');
+    if (!simulation || !simulation.success) {
+      Alert.alert('Transaction Error', simulation?.error || 'Unable to simulate transaction');
       return;
     }
 
-    // For now, just show success
+    // Show transaction preview with warnings
+    const warningMessages = simulation.warnings
+      .filter(w => w.severity === 'warning')
+      .map(w => w.message)
+      .join('\n');
+
+    const gasEth = formatEther(
+      BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
+    );
+
+    const confirmMessage = `
+Send ${amount} ETH to ${recipient}
+
+Network Fee: ~${parseFloat(gasEth).toFixed(6)} ETH (~$${gasEstimateUSD})
+Total: ${(parseFloat(amount) + parseFloat(gasEth)).toFixed(6)} ETH
+
+${warningMessages ? '\n⚠️ Warnings:\n' + warningMessages : ''}
+
+This action requires biometric authentication.`;
+
     Alert.alert(
-      'Transaction Sent',
-      `Sent ${amount} ETH to ${recipient}`,
+      'Confirm Transaction',
+      confirmMessage,
       [
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'OK',
-          onPress: () => {
-            navigation.navigate('Home');
-          },
+          text: 'Send',
+          style: 'default',
+          onPress: executeTransactionHandler,
         },
       ]
     );
   };
 
-  const totalAmount = amount ? parseFloat(amount) + gasEstimate : gasEstimate;
+  const executeTransactionHandler = async () => {
+    if (!simulation) return;
+
+    try {
+      setIsExecuting(true);
+
+      if (!walletAddress) {
+        Alert.alert('Error', 'No wallet address available');
+        return;
+      }
+
+      const amountWei = parseEther(amount).toString();
+      
+      const result = await executeTransaction({
+        from: walletAddress,
+        to: resolvedAddress || recipient,
+        value: amountWei,
+      });
+
+      // Success
+      Alert.alert(
+        'Transaction Sent!',
+        `Transaction Hash: ${result.transactionHash}\n\nYour transaction is being processed by the network.`,
+        [
+          {
+            text: 'View Home',
+            onPress: () => {
+              // Reset form
+              setRecipient('');
+              setAmount('');
+              setSimulation(null);
+              navigation.navigate('Home');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      Alert.alert(
+        'Transaction Failed',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  // Calculate total amount including gas fees
+  const gasEstimateEth = simulation && simulation.success ? 
+    parseFloat(formatEther(
+      BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
+    )) : 0.0003; // Fallback estimate (~$1 at $3000 ETH)
+  
+  const totalAmount = amount ? parseFloat(amount) + gasEstimateEth : gasEstimateEth;
   const isInsufficientBalance = totalAmount > balance;
+  const balanceUSD = balance * ethPrice;
 
   return (
     <KeyboardAvoidingView
@@ -104,8 +312,11 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         {/* Balance Display */}
         <View style={styles.balanceSection}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>{balance.toFixed(4)} ETH</Text>
-          <Text style={styles.balanceUSD}>${balanceUSD.toFixed(2)}</Text>
+          <Text style={styles.balanceAmount}>
+            {walletAddress ? balance.toFixed(4) : '0.0000'} ETH
+            {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
+          </Text>
+          <Text style={styles.balanceUSD}>${walletAddress ? balanceUSD.toFixed(2) : '0.00'}</Text>
         </View>
 
         {/* Recipient Input */}
@@ -122,13 +333,24 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
               autoCorrect={false}
             />
             {recipient.length > 0 && isValidAddress !== null && (
-              <Icon
-                name={isValidAddress ? 'checkmark-circle' : 'close-circle'}
-                size={24}
-                color={isValidAddress ? theme.colors.success : theme.colors.danger}
-              />
+              <View style={styles.validationContainer}>
+                {isResolvingTag ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <Icon
+                    name={isValidAddress ? 'checkmark-circle' : 'close-circle'}
+                    size={24}
+                    color={isValidAddress ? theme.colors.success : theme.colors.danger}
+                  />
+                )}
+              </View>
             )}
           </View>
+          {resolvedAddress && recipient.startsWith('@') && (
+            <Text style={styles.resolvedAddress}>
+              {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
+            </Text>
+          )}
         </View>
 
         {/* Amount Input */}
@@ -148,7 +370,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             {amount && (
               <Text style={styles.amountUSD}>
-                ≈ ${(parseFloat(amount) * (balanceUSD / balance)).toFixed(2)}
+                ≈ ${(parseFloat(amount) * ethPrice).toFixed(2)}
               </Text>
             )}
           </View>
@@ -163,8 +385,41 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Network Fee</Text>
-              <Text style={styles.summaryValue}>~{gasEstimate} ETH</Text>
+              <View style={styles.gasEstimateContainer}>
+                {isSimulating ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <Text style={styles.summaryValue}>
+                    ~{gasEstimateEth.toFixed(6)} ETH
+                    {gasEstimateUSD !== '0.00' && (
+                      <Text style={styles.gasUSD}> (~${gasEstimateUSD})</Text>
+                    )}
+                  </Text>
+                )}
+              </View>
             </View>
+            
+            {/* Warnings */}
+            {simulation?.warnings && simulation.warnings.length > 0 && (
+              <View style={styles.warningsContainer}>
+                {simulation.warnings.map((warning, index) => (
+                  <View key={index} style={styles.warningRow}>
+                    <Icon
+                      name={warning.severity === 'error' ? 'alert-circle' : 'warning'}
+                      size={16}
+                      color={warning.severity === 'error' ? theme.colors.danger : theme.colors.warning}
+                    />
+                    <Text style={[
+                      styles.warningText,
+                      warning.severity === 'error' && styles.errorText
+                    ]}>
+                      {warning.message}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryTotalLabel}>Total</Text>
@@ -172,7 +427,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
                 styles.summaryTotalValue,
                 isInsufficientBalance && styles.insufficientBalance,
               ]}>
-                {totalAmount.toFixed(4)} ETH
+                {totalAmount.toFixed(6)} ETH
               </Text>
             </View>
           </View>
@@ -183,17 +438,25 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!isValidAddress || !amount || isInsufficientBalance) && styles.sendButtonDisabled,
+              (!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!isValidAddress || !amount || isInsufficientBalance}
+            disabled={!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)}
           >
-            <Text style={[
-              styles.sendButtonText,
-              (!isValidAddress || !amount || isInsufficientBalance) && styles.sendButtonTextDisabled,
-            ]}>
-              {isInsufficientBalance ? 'Insufficient Balance' : 'Send'}
-            </Text>
+            {isExecuting ? (
+              <ActivityIndicator size="small" color={theme.colors.text.inverse} />
+            ) : (
+              <Text style={[
+                styles.sendButtonText,
+                (!isValidAddress || !amount || isInsufficientBalance || (simulation && !simulation.success)) && styles.sendButtonTextDisabled,
+              ]}>
+                {isInsufficientBalance 
+                  ? 'Insufficient Balance' 
+                  : simulation && !simulation.success 
+                    ? 'Transaction Error'
+                    : 'Send'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -326,6 +589,43 @@ const styles = StyleSheet.create({
   },
   sendButtonTextDisabled: {
     color: theme.colors.text.tertiary,
+  },
+  gasEstimateContainer: {
+    alignItems: 'flex-end',
+  },
+  gasUSD: {
+    ...theme.typography.caption2,
+    color: theme.colors.text.tertiary,
+  },
+  warningsContainer: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  warningText: {
+    ...theme.typography.caption1,
+    color: theme.colors.warning,
+    flex: 1,
+  },
+  errorText: {
+    color: theme.colors.danger,
+  },
+  validationContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resolvedAddress: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.tertiary,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
   },
 });
 

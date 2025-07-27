@@ -1,42 +1,22 @@
-import { ethers } from 'ethers';
-import Config from 'react-native-config';
+import { getBlockNumber, getChainId } from '@wagmi/core';
+import { mainnet } from '@wagmi/core/chains';
+import { config } from '../config/wagmi';
 
 // Ethereum mainnet configuration
 const ETHEREUM_MAINNET_CHAIN_ID = 1;
-const ETHEREUM_RPC_URL = Config.ALCHEMY_RPC_URL;
-
-// Provider instance (singleton)
-let provider: ethers.providers.JsonRpcProvider | null = null;
 
 /**
- * Initialize and return the Ethereum provider
- * Uses a singleton pattern to avoid multiple connections
+ * Get the wagmi client (replaces singleton provider pattern)
+ * Wagmi handles connection management automatically
  */
-export const getProvider = (): ethers.providers.JsonRpcProvider => {
-  if (!provider) {
-    try {
-      // Initialize provider with mainnet connection
-      provider = new ethers.providers.JsonRpcProvider(
-        ETHEREUM_RPC_URL,
-        {
-          chainId: ETHEREUM_MAINNET_CHAIN_ID,
-          name: 'mainnet',
-        }
-      );
-
-      // Add error handling for provider events
-      provider.on('error', (error) => {
-        console.error('Ethereum provider error:', error);
-      });
-
-      console.log('Ethereum provider initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize Ethereum provider:', error);
-      throw new Error('Failed to connect to Ethereum network');
-    }
+export const getClient = () => {
+  try {
+    console.log('Using wagmi client for Ethereum operations');
+    return config;
+  } catch (error) {
+    console.error('Failed to get wagmi client:', error);
+    throw new Error('Failed to connect to Ethereum network');
   }
-
-  return provider;
 };
 
 /**
@@ -45,8 +25,7 @@ export const getProvider = (): ethers.providers.JsonRpcProvider => {
  */
 export const testConnection = async (): Promise<boolean> => {
   try {
-    const provider = getProvider();
-    const blockNumber = await provider.getBlockNumber();
+    const blockNumber = await getBlockNumber(config);
     console.log('Connected to Ethereum mainnet. Current block:', blockNumber);
     return true;
   } catch (error) {
@@ -58,11 +37,16 @@ export const testConnection = async (): Promise<boolean> => {
 /**
  * Get network information
  */
-export const getNetworkInfo = async (): Promise<ethers.providers.Network | null> => {
+export const getNetworkInfo = async (): Promise<{
+  chainId: number;
+  name: string;
+} | null> => {
   try {
-    const provider = getProvider();
-    const network = await provider.getNetwork();
-    return network;
+    const chainId = await getChainId(config);
+    return {
+      chainId,
+      name: chainId === ETHEREUM_MAINNET_CHAIN_ID ? 'mainnet' : 'unknown'
+    };
   } catch (error) {
     console.error('Failed to get network info:', error);
     return null;
@@ -70,11 +54,17 @@ export const getNetworkInfo = async (): Promise<ethers.providers.Network | null>
 };
 
 /**
- * Reset provider (useful for testing or reconnection)
+ * Reset provider (no-op in wagmi - connection management is automatic)
  */
 export const resetProvider = (): void => {
-  if (provider) {
-    provider.removeAllListeners();
-    provider = null;
-  }
+  console.log('Provider reset requested - wagmi handles connection management automatically');
+};
+
+/**
+ * Legacy getProvider function for backward compatibility
+ * Returns wagmi config instead of ethers provider
+ */
+export const getProvider = () => {
+  console.warn('getProvider() is deprecated - use getClient() or wagmi actions directly');
+  return getClient();
 };

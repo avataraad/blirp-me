@@ -1,6 +1,9 @@
-import { ethers } from 'ethers';
+import 'react-native-get-random-values';
+import { mnemonicToAccount } from 'viem/accounts';
+import { privateKeyToAccount } from 'viem/accounts';
 import * as Keychain from 'react-native-keychain';
 import { MMKV } from 'react-native-mmkv';
+import { Buffer } from 'buffer';
 
 // Initialize MMKV for secure storage
 const storage = new MMKV({
@@ -21,20 +24,26 @@ export interface EncryptedSeed {
 }
 
 class WalletService {
-  // Generate a new wallet with mnemonic phrase
+  // Generate a new wallet with private key
   async generateWallet(): Promise<{
     mnemonic: string;
     address: string;
     privateKey: string;
   }> {
     try {
-      // Generate random wallet
-      const wallet = ethers.Wallet.createRandom();
+      // Generate cryptographically secure random private key
+      const randomBytes = new Uint8Array(32);
+      crypto.getRandomValues(randomBytes);
+      
+      const privateKey = `0x${Buffer.from(randomBytes).toString('hex')}` as `0x${string}`;
+      
+      // Create account from private key
+      const account = privateKeyToAccount(privateKey);
 
       return {
-        mnemonic: wallet.mnemonic!.phrase,
-        address: wallet.address,
-        privateKey: wallet.privateKey,
+        mnemonic: '', // We'll skip mnemonic for now to avoid wordlist issues
+        address: account.address,
+        privateKey,
       };
     } catch (error) {
       console.error('Error generating wallet:', error);
@@ -43,9 +52,16 @@ class WalletService {
   }
 
   // Derive wallet from mnemonic
-  async restoreWalletFromMnemonic(mnemonic: string): Promise<ethers.Wallet> {
+  async restoreWalletFromMnemonic(mnemonic: string): Promise<{
+    address: string;
+    privateKey: string;
+  }> {
     try {
-      return ethers.Wallet.fromMnemonic(mnemonic);
+      const account = mnemonicToAccount(mnemonic);
+      return {
+        address: account.address,
+        privateKey: account.getHdKey().privateKey!,
+      };
     } catch (error) {
       console.error('Error restoring wallet:', error);
       throw new Error('Invalid mnemonic phrase');
@@ -113,9 +129,8 @@ class WalletService {
 // Encrypt data (simplified - in production use proper encryption)
 async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
     // For now, we'll use a simple base64 encoding
-    // React Native doesn't have Buffer, use btoa instead
-    const ciphertext = btoa(data);
-    const iv = btoa(Math.random().toString());
+    const ciphertext = Buffer.from(data).toString('base64');
+    const iv = Buffer.from(Math.random().toString()).toString('base64');
 
     return { ciphertext, iv };
   }
@@ -123,8 +138,7 @@ async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
   // Decrypt data
   async decryptData(encryptedData: EncryptedSeed, _key: string): Promise<string> {
     // For now, simple base64 decoding
-    // Use atob instead of Buffer
-    return atob(encryptedData.ciphertext);
+    return Buffer.from(encryptedData.ciphertext, 'base64').toString();
   }
 
   // Get balance from blockchain

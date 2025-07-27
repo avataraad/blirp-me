@@ -1,5 +1,8 @@
 import axios from 'axios';
 import Config from 'react-native-config';
+import { getBalance } from '@wagmi/core';
+import { formatEther } from 'viem';
+import { config } from '../config/wagmi';
 
 // Moralis API configuration
 const MORALIS_API_KEY = Config.MORALIS_API_KEY;
@@ -126,10 +129,75 @@ export const getWalletBalances = async (
  * @param tokens Array of token balances
  * @returns ETH balance or null if not found
  */
-export const getEthBalance = (tokens: TokenBalance[]): TokenBalance | null => {
+export const getEthBalanceFromTokens = (tokens: TokenBalance[]): TokenBalance | null => {
   return tokens.find(token => 
     token.symbol === 'ETH' && token.token_address === null
   ) || null;
+};
+
+/**
+ * Get ETH balance for a specific address using wagmi/viem
+ * @param address Ethereum address
+ * @returns ETH balance as string
+ */
+export const getEthBalance = async (address: string): Promise<string> => {
+  try {
+    // Use wagmi/core for React Native
+    const balance = await getBalance(config, {
+      address: address as `0x${string}`,
+      chainId: 1
+    });
+    return formatEther(balance.value);
+  } catch (error) {
+    console.error('Failed to get ETH balance:', error);
+    // Fallback to Moralis
+    try {
+      return await getEthBalanceFromMoralis(address);
+    } catch (fallbackError) {
+      console.error('Fallback balance fetch failed:', fallbackError);
+      return '0';
+    }
+  }
+};
+
+/**
+ * Get ETH balance for a specific address using Moralis (with token data)
+ * @param address Ethereum address
+ * @returns ETH balance as string
+ */
+export const getEthBalanceFromMoralis = async (address: string): Promise<string> => {
+  try {
+    const balances = await getWalletBalances(address);
+    const ethToken = getEthBalanceFromTokens(balances.tokens);
+    return ethToken ? ethToken.balance_formatted : '0';
+  } catch (error) {
+    console.error('Failed to get ETH balance from Moralis:', error);
+    return '0';
+  }
+};
+
+/**
+ * Get current ETH price in USD
+ * @returns ETH price in USD
+ */
+export const getEthPrice = async (): Promise<number> => {
+  try {
+    const response = await axios.get(
+      `${MORALIS_BASE_URL}/erc20/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/price`,
+      {
+        params: { chain: 'eth' },
+        headers: {
+          'X-API-Key': MORALIS_API_KEY,
+          'Accept': 'application/json',
+        },
+      }
+    );
+    
+    return response.data.usdPrice || 1900; // Fallback price
+  } catch (error) {
+    console.error('Failed to get ETH price:', error);
+    return 1900; // Fallback price
+  }
 };
 
 /**
