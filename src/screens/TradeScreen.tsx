@@ -1,0 +1,657 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  Modal,
+  FlatList,
+  Image,
+} from 'react-native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { MainTabParamList } from '../types/navigation';
+import { theme } from '../styles/theme';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { useWallet } from '../contexts/WalletContext';
+import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWithBalance } from '../services/tokenService';
+import { formatTokenAmount } from '../services/tokenService';
+import { getEthPrice } from '../services/balance';
+
+type TradeScreenNavigationProp = BottomTabNavigationProp<
+  MainTabParamList,
+  'Trade'
+>;
+
+type Props = {
+  navigation: TradeScreenNavigationProp;
+};
+
+type TradeMode = 'buy' | 'sell';
+
+const TradeScreen: React.FC<Props> = ({ navigation }) => {
+  const { walletAddress } = useWallet();
+  
+  // State
+  const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
+  const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
+  const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(true);
+  const [showTokenSelector, setShowTokenSelector] = useState(false);
+  const [amountUSD, setAmountUSD] = useState('');
+  const [ethPrice, setEthPrice] = useState<number>(0);
+  const [gasEstimateETH, setGasEstimateETH] = useState<string>('0.0001');
+  const [gasEstimateUSD, setGasEstimateUSD] = useState<string>('0.00');
+  
+  // Load tokens and prices
+  useEffect(() => {
+    loadTokensAndPrices();
+  }, [walletAddress]);
+  
+  const loadTokensAndPrices = async () => {
+    if (!walletAddress) return;
+    
+    setIsLoadingTokens(true);
+    try {
+      const [tokensData, ethPriceData] = await Promise.all([
+        getVerifiedTokensWithBalances(walletAddress),
+        getEthPrice()
+      ]);
+      
+      const sortedTokens = sortTokensByBalanceAndMarketCap(tokensData);
+      setTokens(sortedTokens);
+      setEthPrice(ethPriceData);
+      
+      // Set default selected token (first non-ETH token for buy, first token with balance for sell)
+      if (tradeMode === 'buy') {
+        const firstNonETH = sortedTokens.find(t => !t.isNative);
+        setSelectedToken(firstNonETH || null);
+      } else {
+        const firstWithBalance = sortedTokens.find(t => t.usdValue && t.usdValue > 0 && !t.isNative);
+        setSelectedToken(firstWithBalance || null);
+      }
+    } catch (error) {
+      console.error('Failed to load tokens:', error);
+    } finally {
+      setIsLoadingTokens(false);
+    }
+  };
+  
+  // Calculate native token amount based on USD input
+  const calculateNativeAmount = useCallback(() => {
+    if (!amountUSD || !selectedToken || !selectedToken.usdPrice) return '0';
+    
+    try {
+      const usdAmount = parseFloat(amountUSD);
+      if (isNaN(usdAmount)) return '0';
+      
+      const nativeAmount = usdAmount / selectedToken.usdPrice;
+      return nativeAmount.toFixed(selectedToken.decimals === 18 ? 6 : 4);
+    } catch {
+      return '0';
+    }
+  }, [amountUSD, selectedToken]);
+  
+  // Update gas estimate in USD
+  useEffect(() => {
+    const gasUSD = parseFloat(gasEstimateETH) * ethPrice;
+    setGasEstimateUSD(gasUSD.toFixed(2));
+  }, [gasEstimateETH, ethPrice]);
+  
+  // Get ETH balance
+  const ethToken = tokens.find(t => t.isNative);
+  const ethBalance = ethToken?.usdValue || 0;
+  
+  // Calculate max amount for selling (accounting for gas)
+  const getMaxSellAmount = useCallback(() => {
+    if (!selectedToken) return '0';
+    
+    if (selectedToken.isNative) {
+      // For ETH, subtract gas costs
+      const gasUSD = parseFloat(gasEstimateUSD);
+      const maxUSD = Math.max(0, (selectedToken.usdValue || 0) - gasUSD);
+      return maxUSD.toFixed(2);
+    }
+    
+    return (selectedToken.usdValue || 0).toFixed(2);
+  }, [selectedToken, gasEstimateUSD]);
+  
+  // Calculate max amount for buying (ETH balance minus gas)
+  const getMaxBuyAmount = useCallback(() => {
+    const gasUSD = parseFloat(gasEstimateUSD);
+    const maxUSD = Math.max(0, ethBalance - gasUSD);
+    return maxUSD.toFixed(2);
+  }, [ethBalance, gasEstimateUSD]);
+  
+  const handleMaxPress = () => {
+    if (tradeMode === 'buy') {
+      setAmountUSD(getMaxBuyAmount());
+    } else {
+      setAmountUSD(getMaxSellAmount());
+    }
+  };
+  
+  const handleTokenSelect = (token: TokenWithBalance) => {
+    setSelectedToken(token);
+    setShowTokenSelector(false);
+    // Reset amount when token changes
+    setAmountUSD('');
+  };
+  
+  const handleTradeModeChange = (mode: TradeMode) => {
+    setTradeMode(mode);
+    setAmountUSD('');
+    
+    // Update default selected token based on mode
+    if (mode === 'buy') {
+      const firstNonETH = tokens.find(t => !t.isNative);
+      setSelectedToken(firstNonETH || null);
+    } else {
+      const firstWithBalance = tokens.find(t => t.usdValue && t.usdValue > 0 && !t.isNative);
+      setSelectedToken(firstWithBalance || null);
+    }
+  };
+  
+  const isReviewDisabled = () => {
+    if (!amountUSD || parseFloat(amountUSD) <= 0) return true;
+    
+    if (tradeMode === 'buy') {
+      return parseFloat(amountUSD) > parseFloat(getMaxBuyAmount());
+    } else {
+      if (!selectedToken) return true;
+      return parseFloat(amountUSD) > parseFloat(getMaxSellAmount());
+    }
+  };
+  
+  const renderTokenItem = ({ item }: { item: TokenWithBalance }) => {
+    const isDisabled = tradeMode === 'sell' && (!item.usdValue || item.usdValue === 0);
+    
+    return (
+      <TouchableOpacity
+        style={[styles.tokenItem, isDisabled && styles.tokenItemDisabled]}
+        onPress={() => !isDisabled && handleTokenSelect(item)}
+        disabled={isDisabled}
+      >
+        <View style={styles.tokenIconContainer}>
+          {item.logoURI ? (
+            <Image source={{ uri: item.logoURI }} style={styles.tokenIcon} />
+          ) : (
+            <View style={[styles.tokenIcon, styles.tokenIconPlaceholder]}>
+              <Text style={styles.tokenIconText}>{item.symbol[0]}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.tokenInfo}>
+          <Text style={[styles.tokenSymbol, isDisabled && styles.tokenTextDisabled]}>
+            {item.symbol}
+          </Text>
+          <Text style={[styles.tokenName, isDisabled && styles.tokenTextDisabled]}>
+            {item.name}
+          </Text>
+        </View>
+        <View style={styles.tokenBalance}>
+          <Text style={[styles.tokenBalanceAmount, isDisabled && styles.tokenTextDisabled]}>
+            {formatTokenAmount(item.balance, item.decimals, 4)}
+          </Text>
+          {item.usdValue ? (
+            <Text style={[styles.tokenBalanceUSD, isDisabled && styles.tokenTextDisabled]}>
+              ${item.usdValue.toFixed(2)}
+            </Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  
+  if (!walletAddress) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyState}>
+          <Icon name="wallet-outline" size={48} color={theme.colors.text.tertiary} />
+          <Text style={styles.emptyStateText}>Please connect your wallet first</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Trade Mode Toggle */}
+          <View style={styles.tradeModeContainer}>
+            <TouchableOpacity
+              style={[styles.tradeModeButton, tradeMode === 'buy' && styles.tradeModeButtonActive]}
+              onPress={() => handleTradeModeChange('buy')}
+            >
+              <Text style={[styles.tradeModeText, tradeMode === 'buy' && styles.tradeModeTextActive]}>
+                Buy
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tradeModeButton, tradeMode === 'sell' && styles.tradeModeButtonActive]}
+              onPress={() => handleTradeModeChange('sell')}
+            >
+              <Text style={[styles.tradeModeText, tradeMode === 'sell' && styles.tradeModeTextActive]}>
+                Sell
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Token Selector */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>
+              {tradeMode === 'buy' ? 'Buy' : 'Sell'}
+            </Text>
+            <TouchableOpacity
+              style={styles.tokenSelector}
+              onPress={() => setShowTokenSelector(true)}
+              disabled={isLoadingTokens}
+            >
+              {isLoadingTokens ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : selectedToken ? (
+                <>
+                  <View style={styles.selectedTokenInfo}>
+                    {selectedToken.logoURI ? (
+                      <Image source={{ uri: selectedToken.logoURI }} style={styles.selectedTokenIcon} />
+                    ) : (
+                      <View style={[styles.selectedTokenIcon, styles.tokenIconPlaceholder]}>
+                        <Text style={styles.tokenIconText}>{selectedToken.symbol[0]}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.selectedTokenSymbol}>{selectedToken.symbol}</Text>
+                  </View>
+                  <Icon name="chevron-down" size={20} color={theme.colors.text.secondary} />
+                </>
+              ) : (
+                <Text style={styles.placeholderText}>Select a token</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          
+          {/* Amount Input */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Amount</Text>
+              <TouchableOpacity onPress={handleMaxPress}>
+                <Text style={styles.maxButton}>Max</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.amountInputContainer}>
+              <Text style={styles.currencySymbol}>$</Text>
+              <TextInput
+                style={styles.amountInput}
+                value={amountUSD}
+                onChangeText={setAmountUSD}
+                placeholder="0.00"
+                placeholderTextColor={theme.colors.text.tertiary}
+                keyboardType="decimal-pad"
+                editable={!!selectedToken}
+              />
+            </View>
+            {selectedToken && amountUSD && (
+              <Text style={styles.conversionText}>
+                You will {tradeMode} {calculateNativeAmount()} {selectedToken.symbol}
+              </Text>
+            )}
+          </View>
+          
+          {/* Transaction Details */}
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Network Fee</Text>
+              <View style={styles.detailValue}>
+                <Text style={styles.detailValueText}>${gasEstimateUSD}</Text>
+                <Text style={styles.detailValueSubtext}>~{gasEstimateETH} ETH</Text>
+              </View>
+            </View>
+            
+            {tradeMode === 'buy' && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Available ETH</Text>
+                <Text style={styles.detailValueText}>${ethBalance.toFixed(2)}</Text>
+              </View>
+            )}
+            
+            {tradeMode === 'sell' && selectedToken && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Available {selectedToken.symbol}</Text>
+                <Text style={styles.detailValueText}>
+                  ${(selectedToken.usdValue || 0).toFixed(2)}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          {/* Review Button */}
+          <TouchableOpacity
+            style={[styles.reviewButton, isReviewDisabled() && styles.reviewButtonDisabled]}
+            disabled={isReviewDisabled()}
+          >
+            <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
+              Review Trade
+            </Text>
+          </TouchableOpacity>
+          
+          {/* Warnings */}
+          {tradeMode === 'buy' && parseFloat(amountUSD) > parseFloat(getMaxBuyAmount()) && (
+            <View style={styles.warningContainer}>
+              <Icon name="alert-circle" size={16} color={theme.colors.destructive} />
+              <Text style={styles.warningText}>Insufficient ETH balance</Text>
+            </View>
+          )}
+          
+          {tradeMode === 'sell' && selectedToken && parseFloat(amountUSD) > parseFloat(getMaxSellAmount()) && (
+            <View style={styles.warningContainer}>
+              <Icon name="alert-circle" size={16} color={theme.colors.destructive} />
+              <Text style={styles.warningText}>
+                Insufficient {selectedToken.symbol} balance
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+      
+      {/* Token Selector Modal */}
+      <Modal
+        visible={showTokenSelector}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTokenSelector(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Token</Text>
+              <TouchableOpacity onPress={() => setShowTokenSelector(false)}>
+                <Icon name="close" size={24} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={tokens.filter(t => tradeMode === 'buy' ? !t.isNative : true)}
+              renderItem={renderTokenItem}
+              keyExtractor={(item) => item.address}
+              style={styles.tokenList}
+            />
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
+  },
+  emptyStateText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.md,
+    textAlign: 'center',
+  },
+  tradeModeContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 4,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xl,
+  },
+  tradeModeButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
+  },
+  tradeModeButtonActive: {
+    backgroundColor: theme.colors.background,
+    ...theme.shadows.sm,
+  },
+  tradeModeText: {
+    ...theme.typography.headline,
+    color: theme.colors.text.secondary,
+  },
+  tradeModeTextActive: {
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  section: {
+    marginBottom: theme.spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  sectionLabel: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: theme.spacing.sm,
+  },
+  maxButton: {
+    ...theme.typography.footnote,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  tokenSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    minHeight: 56,
+  },
+  selectedTokenInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedTokenIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: theme.spacing.sm,
+  },
+  selectedTokenSymbol: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+  },
+  placeholderText: {
+    ...theme.typography.body,
+    color: theme.colors.text.tertiary,
+  },
+  amountInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  currencySymbol: {
+    ...theme.typography.title2,
+    color: theme.colors.text.secondary,
+    marginRight: theme.spacing.xs,
+  },
+  amountInput: {
+    flex: 1,
+    ...theme.typography.title2,
+    color: theme.colors.text.primary,
+    padding: 0,
+  },
+  conversionText: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
+  },
+  detailsContainer: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.xl,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+  },
+  detailLabel: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+  },
+  detailValue: {
+    alignItems: 'flex-end',
+  },
+  detailValueText: {
+    ...theme.typography.callout,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  detailValueSubtext: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.tertiary,
+  },
+  reviewButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.md,
+  },
+  reviewButtonDisabled: {
+    backgroundColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  reviewButtonText: {
+    ...theme.typography.headline,
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
+  },
+  reviewButtonTextDisabled: {
+    color: theme.colors.text.tertiary,
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  warningText: {
+    ...theme.typography.caption1,
+    color: theme.colors.destructive,
+    marginLeft: theme.spacing.xs,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  tokenList: {
+    paddingBottom: theme.spacing.xl,
+  },
+  tokenItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  tokenItemDisabled: {
+    opacity: 0.5,
+  },
+  tokenIconContainer: {
+    marginRight: theme.spacing.md,
+  },
+  tokenIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  tokenIconPlaceholder: {
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tokenIconText: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+  },
+  tokenInfo: {
+    flex: 1,
+  },
+  tokenSymbol: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  tokenName: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.secondary,
+  },
+  tokenBalance: {
+    alignItems: 'flex-end',
+  },
+  tokenBalanceAmount: {
+    ...theme.typography.callout,
+    color: theme.colors.text.primary,
+  },
+  tokenBalanceUSD: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.secondary,
+  },
+  tokenTextDisabled: {
+    color: theme.colors.text.tertiary,
+  },
+});
+
+export default TradeScreen;

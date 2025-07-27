@@ -153,7 +153,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           <Text style={styles.actionText}>Request</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('Trade')}
+        >
           <Text style={styles.actionText}>Trade</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton}>

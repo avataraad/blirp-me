@@ -14,7 +14,8 @@
       "Bash(npm run lint:*)",
       "Bash(npm start)",
       "Bash(npm test:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run ios:*)"
     ],
     "deny": []
   }

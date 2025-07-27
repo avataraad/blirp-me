@@ -13,6 +13,7 @@ import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ReceiveScreen from '../screens/ReceiveScreen';
 import PayScreen from '../screens/PayScreen';
+import TradeScreen from '../screens/TradeScreen';
 import SupabaseTestScreen from '../screens/SupabaseTestScreen';
 
 // Import navigation types
@@ -37,6 +38,8 @@ const TabBarIcon = ({ route, focused, color, size }: {
     iconName = focused ? 'home' : 'home-outline';
   } else if (route.name === 'Pay') {
     iconName = focused ? 'send' : 'send-outline';
+  } else if (route.name === 'Trade') {
+    iconName = focused ? 'swap-horizontal' : 'swap-horizontal-outline';
   } else if (route.name === 'Receive') {
     iconName = focused ? 'download' : 'download-outline';
   }
@@ -73,6 +76,7 @@ const MainTabs = () => {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Pay" component={PayScreen} />
+      <Tab.Screen name="Trade" component={TradeScreen} />
       <Tab.Screen name="Receive" component={ReceiveScreen} />
     </Tab.Navigator>
   );
