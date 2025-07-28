@@ -29,6 +29,7 @@ export interface TradeExecutionParams {
   amountWei: string;
   userAddress: string;
   slippage: number;
+  quoteResponse: BungeeQuoteResponse; // Add the full quote response
 }
 
 export interface TradeExecutionResult {
@@ -138,7 +139,7 @@ export const executeTrade = async (
   params: TradeExecutionParams
 ): Promise<TradeExecutionResult> => {
   try {
-    const { routeId, route, fromToken, toToken, userAddress, slippage } = params;
+    const { routeId, route, fromToken, toToken, userAddress, slippage, quoteResponse } = params;
     
     // MOCK MODE: Return success without executing real transaction
     if (false) { // TODO: Remove when ready for real trades
@@ -156,11 +157,20 @@ export const executeTrade = async (
     
     // Step 1: Build the transaction via Bungee
     console.log('🔄 Building Bungee transaction...');
-    const bungeeTransaction = await buildBungeeTransaction(
+    let bungeeTransaction = await buildBungeeTransaction(
       routeId,
       userAddress,
-      slippage
+      slippage,
+      quoteResponse
     );
+    
+    // Check if signature is required
+    if ((bungeeTransaction as any).requiresSignature) {
+      console.log('📝 Signature required for transaction');
+      // TODO: Implement EIP-712 signature
+      // For now, throw an error
+      throw new Error('Transaction requires signature - not yet implemented');
+    }
     
     // Step 2: Check if approval is needed (for selling ERC20 tokens)
     if (!fromToken.isNative) {

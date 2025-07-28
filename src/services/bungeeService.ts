@@ -41,6 +41,7 @@ export interface BungeeQuoteResponse {
   toAmount: string;
   estimatedGas: string;
   status: string;
+  originalResult?: any; // Store the full API response for submit
 }
 
 export interface BungeeRoute {
@@ -57,6 +58,13 @@ export interface BungeeRoute {
   bridgeFeeInUsd: number;
   outputAmountMin: string;
   executionDuration: number;
+  // Additional fields for submit
+  approvalData?: any;
+  txData?: any;
+  requestType?: string;
+  userOp?: string;
+  signTypedData?: any;
+  quoteExpiry?: number;
 }
 
 export interface TokenInfo {
@@ -73,6 +81,7 @@ export interface BungeeTransactionRequest {
   routeId: string;
   userAddress: string;
   slippage?: number;
+  quoteResponse?: BungeeQuoteResponse; // Pass the full quote response
 }
 
 export interface BungeeTransactionResponse {
@@ -220,10 +229,11 @@ export const getBungeeQuote = async (
     }
     
     // Handle Bungee API response format
-    // The response contains input info and routes (autoRoute or manualRoutes)
-    const routes = result.autoRoute ? [result.autoRoute] : result.manualRoutes || [];
+    // Prioritize autoRoute over manualRoutes
+    const autoRoute = result.autoRoute;
+    const manualRoutes = result.manualRoutes || [];
     
-    if (routes.length === 0) {
+    if (!autoRoute && manualRoutes.length === 0) {
       throw createError(
         ErrorType.QUOTE_FAILED,
         'No routes available for this trade',
@@ -233,25 +243,35 @@ export const getBungeeQuote = async (
       );
     }
     
-    // For now, we'll use the first route
-    const selectedRoute = routes[0];
+    // Use autoRoute if available, otherwise use first manual route
+    const selectedRoute = autoRoute || manualRoutes[0];
+    const routes = autoRoute ? [autoRoute] : manualRoutes;
     
     // Transform to our expected format
     const transformedResponse: BungeeQuoteResponse = {
       routes: routes.map((route: any) => ({
-        routeId: route.routeId || route.id || `bungee-${Date.now()}`,
+        routeId: route.quoteId || route.requestHash || `bungee-${Date.now()}`,
         fromAmount: result.input.amount,
-        toAmount: route.toAmount || route.outputAmount || '0',
-        estimatedGas: route.estimatedGas || '200000',
-        estimatedGasFeesInUsd: route.totalGasFeesInUsd || 5,
-        routePath: route.usedDexName ? [route.usedDexName] : ['Bungee'],
-        exchangeRate: route.exchangeRate || 1,
-        priceImpact: route.priceImpact || 0,
-        slippage: slippage,
-        bridgeFee: route.bridgeFee?.amount || 0,
-        bridgeFeeInUsd: route.bridgeFee?.amountInUsd || 0,
-        outputAmountMin: route.minAmountOut || route.toAmount || '0',
-        executionDuration: route.serviceTime || 30
+        toAmount: route.output?.amount || '0',
+        estimatedGas: route.gasFee?.gasLimit || '200000',
+        estimatedGasFeesInUsd: route.gasFee?.feeInUsd || 0.01,
+        routePath: route.routeDetails ? [route.routeDetails.name] : ['Bungee Protocol'],
+        exchangeRate: (route.output?.valueInUsd && result.input.valueInUsd) 
+          ? route.output.valueInUsd / result.input.valueInUsd 
+          : 1,
+        priceImpact: 0, // Not provided in response
+        slippage: route.slippage || slippage,
+        bridgeFee: route.routeDetails?.routeFee?.amount || '0',
+        bridgeFeeInUsd: route.routeDetails?.routeFee?.feeInUsd || 0,
+        outputAmountMin: route.output?.minAmountOut || '0',
+        executionDuration: route.estimatedTime || 30,
+        // Store additional data needed for submit
+        approvalData: route.approvalData,
+        txData: route.txData,
+        requestType: route.requestType || 'SINGLE_OUTPUT_REQUEST',
+        userOp: route.userOp,
+        signTypedData: route.signTypedData,
+        quoteExpiry: route.quoteExpiry
       })),
       fromToken: {
         address: result.input.token.address,
@@ -262,18 +282,20 @@ export const getBungeeQuote = async (
         chainId: result.input.token.chainId
       },
       toToken: {
-        // For buy mode, we need to determine the output token from the route
-        address: toToken.address,
-        symbol: toToken.symbol,
-        decimals: toToken.decimals,
-        name: toToken.name,
-        logoURI: toToken.logoURI,
-        chainId: ETHEREUM_CHAIN_ID
+        // Get output token from the route
+        address: selectedRoute.output?.token?.address || toToken.address,
+        symbol: selectedRoute.output?.token?.symbol || toToken.symbol,
+        decimals: selectedRoute.output?.token?.decimals || toToken.decimals,
+        name: selectedRoute.output?.token?.name || toToken.name,
+        logoURI: selectedRoute.output?.token?.logoURI || selectedRoute.output?.token?.icon || toToken.logoURI,
+        chainId: selectedRoute.output?.token?.chainId || ETHEREUM_CHAIN_ID
       },
       fromAmount: result.input.amount,
-      toAmount: selectedRoute.toAmount || selectedRoute.outputAmount || '0',
-      estimatedGas: selectedRoute.estimatedGas || '200000',
-      status: 'success'
+      toAmount: selectedRoute.output?.amount || '0',
+      estimatedGas: selectedRoute.gasFee?.gasLimit || '200000',
+      status: 'success',
+      // Store the full result for building the submit request
+      originalResult: result
     };
 
     return transformedResponse;
@@ -362,16 +384,20 @@ export const getBestRoute = (quoteResponse: BungeeQuoteResponse): BungeeRoute =>
 };
 
 /**
- * Build transaction for the selected route
+ * Build transaction for the selected route using Bungee submit endpoint
  * @param routeId - Route ID from quote
  * @param userAddress - User's wallet address
  * @param slippage - Slippage tolerance
+ * @param quoteResponse - The full quote response containing route details
+ * @param userSignature - User's signature for the transaction
  * @returns Transaction data for execution
  */
 export const buildBungeeTransaction = async (
   routeId: string,
   userAddress: string,
-  slippage: number = 1
+  slippage: number = 1,
+  quoteResponse?: BungeeQuoteResponse,
+  userSignature?: string
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
   if (false) {
@@ -385,32 +411,108 @@ export const buildBungeeTransaction = async (
       chainId: 1
     };
   }
+  
   try {
-    const params: BungeeTransactionRequest = {
-      routeId,
-      userAddress,
-      slippage,
+    if (!quoteResponse || !quoteResponse.originalResult) {
+      throw new Error('Quote response required for building transaction');
+    }
+    
+    const originalResult = quoteResponse.originalResult;
+    const selectedRoute = quoteResponse.routes.find(r => r.routeId === routeId) || quoteResponse.routes[0];
+    
+    // For autoRoute, if userOp is "sign", we need the user's signature
+    if (selectedRoute.userOp === 'sign' && !userSignature) {
+      // Return the sign data so the UI can prompt for signature
+      return {
+        to: '', // No transaction yet
+        data: JSON.stringify(selectedRoute.signTypedData), // Return sign data
+        value: '0',
+        gasLimit: selectedRoute.estimatedGas,
+        chainId: originalResult.originChainId,
+        requiresSignature: true,
+        signData: selectedRoute.signTypedData
+      } as any;
+    }
+    
+    // Build the submit request based on the example
+    const submitRequest = {
+      request: {
+        basicReq: {
+          originChainId: originalResult.originChainId,
+          destinationChainId: originalResult.destinationChainId,
+          deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+          nonce: Date.now().toString(),
+          sender: userAddress,
+          receiver: originalResult.receiverAddress,
+          delegate: userAddress,
+          bungeeGateway: selectedRoute.approvalData?.spenderAddress || '0x3a23F943181408EAC424116Af7b7790c94Cb97a5',
+          switchboardId: 1,
+          inputToken: originalResult.input.token.address,
+          inputAmount: originalResult.input.amount,
+          outputToken: selectedRoute.output?.token?.address || originalResult.input.token.address,
+          minOutputAmount: selectedRoute.outputAmountMin || selectedRoute.output?.minAmountOut || '0',
+          refuelAmount: '0'
+        },
+        swapOutputToken: '0x0000000000000000000000000000000000000000',
+        minSwapOutput: '0',
+        metadata: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        affiliateFees: '0x',
+        minDestGas: '0',
+        destinationPayload: originalResult.destinationExec?.destinationPayload || '0x',
+        exclusiveTransmitter: '0x0000000000000000000000000000000000000000'
+      },
+      userSignature: userSignature || '0x', // Empty if not required
+      requestType: selectedRoute.requestType || 'SINGLE_OUTPUT_REQUEST',
+      quoteId: routeId
     };
 
-    const response = await bungeeApi.post('/api/v1/bungee/submit', params);
+    console.log('Submitting to Bungee:', JSON.stringify(submitRequest, null, 2));
     
-    if (!response.data || !response.data.to || !response.data.data) {
-      throw new Error('Invalid transaction response');
+    const response = await bungeeApi.post('/api/v1/bungee/submit', submitRequest);
+    
+    console.log('Bungee submit response:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data) {
+      throw new Error('Invalid submit response');
+    }
+    
+    // The submit endpoint should return transaction data
+    // If it returns a different format, we need to adapt
+    if (response.data.txData) {
+      return {
+        to: response.data.txData.to,
+        data: response.data.txData.data,
+        value: response.data.txData.value || '0x00',
+        gasLimit: selectedRoute.estimatedGas,
+        chainId: response.data.txData.chainId || originalResult.originChainId
+      };
+    }
+    
+    // Fallback: use the txData from the route if available
+    if (selectedRoute.txData) {
+      return {
+        to: selectedRoute.txData.to,
+        data: selectedRoute.txData.data,
+        value: selectedRoute.txData.value || '0x00',
+        gasLimit: selectedRoute.estimatedGas,
+        chainId: selectedRoute.txData.chainId || originalResult.originChainId
+      };
     }
 
-    return response.data;
+    throw new Error('No transaction data in response');
   } catch (error) {
     if (axios.isAxiosError(error)) {
+      console.error('Bungee submit error response:', error.response?.data);
       if (error.response?.status === 400) {
-        throw new Error(error.response.data?.message || 'Invalid transaction request');
+        throw new Error(error.response.data?.message || 'Invalid submit request');
       }
       if (error.response?.status === 404) {
-        throw new Error('Route not found or expired');
+        throw new Error('Quote expired or not found');
       }
     }
     
     console.error('Bungee transaction build error:', error);
-    throw new Error('Failed to build transaction');
+    throw new Error('Failed to build transaction: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
 };
 

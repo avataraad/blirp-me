@@ -89,7 +89,7 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   };
   
   const handleExecuteTrade = async () => {
-    if (!selectedRoute || !walletAddress) return;
+    if (!selectedRoute || !walletAddress || !quote) return;
     
     setIsExecuting(true);
     setExecutionStatus('Preparing transaction...');
@@ -103,7 +103,8 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         toToken,
         amountWei,
         userAddress: walletAddress,
-        slippage: 1
+        slippage: 1,
+        quoteResponse: quote
       });
       
       if (result.status === 'failed') {
