@@ -9,7 +9,8 @@ import {
   waitForTransaction,
   SimulationResult,
   SignedTransaction,
-  TransactionReceipt
+  TransactionReceipt,
+  signTypedData
 } from './transactionService';
 import { 
   buildBungeeTransaction,
@@ -136,7 +137,8 @@ export const checkTokenAllowance = async (
  * @returns Execution result
  */
 export const executeTrade = async (
-  params: TradeExecutionParams
+  params: TradeExecutionParams,
+  setExecutionStatus?: (status: string) => void
 ): Promise<TradeExecutionResult> => {
   try {
     const { routeId, route, fromToken, toToken, userAddress, slippage, quoteResponse } = params;
@@ -167,9 +169,32 @@ export const executeTrade = async (
     // Check if signature is required
     if ((bungeeTransaction as any).requiresSignature) {
       console.log('📝 Signature required for transaction');
-      // TODO: Implement EIP-712 signature
-      // For now, throw an error
-      throw new Error('Transaction requires signature - not yet implemented');
+      setExecutionStatus?.('Awaiting signature...');
+      
+      const signData = (bungeeTransaction as any).signData;
+      if (!signData || !signData.domain || !signData.types || !signData.values) {
+        throw new Error('Invalid signature data from Bungee API');
+      }
+      
+      // Sign the typed data
+      const userSignature = await signTypedData(
+        signData.domain,
+        signData.types,
+        signData.values,
+        userAddress
+      );
+      
+      console.log('✅ User signature obtained');
+      setExecutionStatus?.('Building transaction...');
+      
+      // Rebuild transaction with signature
+      bungeeTransaction = await buildBungeeTransaction(
+        routeId,
+        userAddress,
+        slippage,
+        quoteResponse,
+        userSignature
+      );
     }
     
     // Step 2: Check if approval is needed (for selling ERC20 tokens)

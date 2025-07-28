@@ -105,7 +105,7 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         userAddress: walletAddress,
         slippage: 1,
         quoteResponse: quote
-      });
+      }, setExecutionStatus);
       
       if (result.status === 'failed') {
         throw new Error(result.error || 'Trade execution failed');

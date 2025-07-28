@@ -4,6 +4,7 @@ import { estimateFeesPerGas, getTransactionCount, waitForTransactionReceipt, get
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
 import { mainnet } from '@wagmi/core/chains';
+import { TypedDataDomain, TypedDataField } from 'viem';
 import * as Keychain from 'react-native-keychain';
 
 // Alchemy API configuration (kept for reference)
@@ -512,6 +513,51 @@ export const waitForTransaction = async (
   } catch (error) {
     console.error('Failed to get transaction receipt:', error);
     throw new Error('Failed to confirm transaction');
+  }
+};
+
+/**
+ * Sign EIP-712 typed data for Bungee transactions
+ */
+export const signTypedData = async (
+  domain: TypedDataDomain,
+  types: Record<string, TypedDataField[]>,
+  values: Record<string, any>,
+  userAddress: string
+): Promise<string> => {
+  try {
+    // Get the private key from secure storage with biometric auth
+    const privateKey = await getPrivateKeyFromSecureStorage({ 
+      from: userAddress,
+      to: userAddress,
+      value: '0' 
+    });
+    
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    
+    // Create a wallet client for signing
+    const walletClient = createWalletClient({
+      account,
+      chain: mainnet,
+      transport: http()
+    });
+    
+    // Find the primary type (the one that's not 'EIP712Domain')
+    const primaryType = Object.keys(types).find(type => type !== 'EIP712Domain') || Object.keys(types)[0];
+    
+    // Sign the typed data
+    const signature = await walletClient.signTypedData({
+      domain,
+      types,
+      primaryType,
+      message: values
+    });
+    
+    console.log('EIP-712 signature generated:', signature);
+    return signature;
+  } catch (error) {
+    console.error('Failed to sign typed data:', error);
+    throw new Error('Failed to sign transaction data: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
 };
 
