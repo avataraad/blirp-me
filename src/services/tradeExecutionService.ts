@@ -141,7 +141,7 @@ export const executeTrade = async (
     const { routeId, route, fromToken, toToken, userAddress, slippage } = params;
     
     // MOCK MODE: Return success without executing real transaction
-    if (true) { // TODO: Remove when ready for real trades
+    if (false) { // TODO: Remove when ready for real trades
       console.log('🧪 MOCK MODE: Simulating successful trade execution');
       const mockTxHash = '0x' + Math.random().toString(16).substring(2) + Date.now().toString(16);
       

@@ -128,7 +128,7 @@ export const getBungeeQuote = async (
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
   // For now, use mock service due to parameter validation errors
-  if (true) {
+  if (false) {
     console.log('Using mock service while Bungee API parameters are being debugged');
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
@@ -330,7 +330,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     // For now, return a simple mock that won't execute
     // This prevents actual ETH from being sent
     return {
@@ -379,7 +379,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       status: 'COMPLETED',
       transactionHash,
