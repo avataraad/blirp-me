@@ -62,12 +62,19 @@ export const getMockQuote = async (
     exchangeRate = 0.998;
   }
   
+  // Calculate realistic gas cost based on current ETH price
+  // Assuming ~3 gwei gas price and 150k gas units
+  const gasUnits = 150000;
+  const gasPriceGwei = 3; // Current realistic gas price
+  const gasInEth = (gasUnits * gasPriceGwei) / 1e9;
+  const gasInUsd = gasInEth * 3800; // Assuming $3800/ETH
+  
   const route: BungeeRoute = {
     routeId: 'mock-route-' + Date.now(),
     fromAmount: amountWei,
     toAmount: toAmount,
-    estimatedGas: '150000',
-    estimatedGasFeesInUsd: 5.50,
+    estimatedGas: gasUnits.toString(),
+    estimatedGasFeesInUsd: parseFloat(gasInUsd.toFixed(2)),
     routePath: ['Uniswap V3'],
     exchangeRate: exchangeRate,
     priceImpact: -0.3,

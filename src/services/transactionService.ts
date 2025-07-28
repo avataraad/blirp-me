@@ -1,5 +1,5 @@
 import Config from 'react-native-config';
-import { encodeFunctionData, formatEther, parseGwei, parseTransaction, createWalletClient, http } from 'viem';
+import { encodeFunctionData, formatEther, formatGwei, parseGwei, parseTransaction, createWalletClient, http } from 'viem';
 import { estimateFeesPerGas, getTransactionCount, waitForTransactionReceipt, getPublicClient } from '@wagmi/core';
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
@@ -80,22 +80,43 @@ export const getCurrentGasPrices = async (): Promise<{
   gasPrice: string;
 }> => {
   try {
-    const fees = await estimateFeesPerGas(config, {
-      chainId: 1
+    const publicClient = getPublicClient(config, { chainId: 1 });
+    if (!publicClient) {
+      throw new Error('Failed to get public client');
+    }
+    
+    // Get current gas price from the network
+    const gasPrice = await publicClient.getGasPrice();
+    
+    // For EIP-1559, estimate fees
+    const block = await publicClient.getBlock();
+    const baseFeePerGas = block.baseFeePerGas || gasPrice;
+    
+    // Calculate maxPriorityFeePerGas (tip) - typically 1-2 gwei
+    const maxPriorityFeePerGas = parseGwei('1').toString();
+    
+    // Calculate maxFeePerGas = (2 * baseFee) + maxPriorityFeePerGas
+    const maxFeePerGas = (baseFeePerGas * 2n + BigInt(maxPriorityFeePerGas)).toString();
+    
+    console.log('Current gas prices:', {
+      baseFeePerGas: formatGwei(baseFeePerGas),
+      maxPriorityFeePerGas: formatGwei(BigInt(maxPriorityFeePerGas)),
+      maxFeePerGas: formatGwei(BigInt(maxFeePerGas)),
+      gasPrice: formatGwei(gasPrice)
     });
     
     return {
-      maxFeePerGas: fees.maxFeePerGas?.toString() || parseGwei('15').toString(),
-      maxPriorityFeePerGas: fees.maxPriorityFeePerGas?.toString() || parseGwei('1.5').toString(),
-      gasPrice: fees.maxFeePerGas?.toString() || parseGwei('15').toString()
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      gasPrice: gasPrice.toString()
     };
   } catch (error) {
     console.error('Failed to get gas prices:', error);
-    // Use reasonable fallback gas prices (15 gwei base, 1.5 gwei priority)
+    // Use more reasonable fallback gas prices (5 gwei base, 1 gwei priority)
     return {
-      maxFeePerGas: parseGwei('15').toString(),
-      maxPriorityFeePerGas: parseGwei('1.5').toString(),
-      gasPrice: parseGwei('15').toString()
+      maxFeePerGas: parseGwei('5').toString(),
+      maxPriorityFeePerGas: parseGwei('1').toString(),
+      gasPrice: parseGwei('5').toString()
     };
   }
 };

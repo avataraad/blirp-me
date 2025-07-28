@@ -86,16 +86,16 @@ export const estimateTradeGas = async (
     console.error('Failed to estimate trade gas:', error);
     
     // Return conservative estimates on error
-    const fallbackGasUnits = BigInt(GAS_LIMITS.COMPLEX_SWAP);
-    const fallbackGasWei = fallbackGasUnits * BigInt('20000000000'); // 20 gwei
+    const fallbackGasUnits = BigInt(GAS_LIMITS.BUNGEE_INBOX_TRADE);
+    const fallbackGasWei = fallbackGasUnits * BigInt('5000000000'); // 5 gwei fallback
     const fallbackGasETH = (Number(fallbackGasWei) / 1e18).toFixed(6);
     const fallbackGasUSD = (parseFloat(fallbackGasETH) * ethPrice).toFixed(2);
     
     return {
-      tradeGas: GAS_LIMITS.COMPLEX_SWAP.toString(),
+      tradeGas: GAS_LIMITS.BUNGEE_INBOX_TRADE.toString(),
       totalGasETH: fallbackGasETH,
       totalGasUSD: fallbackGasUSD,
-      maxFeePerGas: '20000000000',
+      maxFeePerGas: '5000000000',
       requiresApproval: false,
     };
   }
