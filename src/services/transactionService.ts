@@ -142,6 +142,38 @@ const buildERC20TransferData = (to: string, amount: string): string => {
 };
 
 /**
+ * Estimate gas for a transaction using eth_estimateGas
+ */
+export const estimateTransactionGas = async (params: {
+  from: string;
+  to: string;
+  value?: string;
+  data?: string;
+}): Promise<string> => {
+  try {
+    const publicClient = getPublicClient(config, { chainId: 1 });
+    if (!publicClient) {
+      throw new Error('Failed to get public client');
+    }
+    
+    const gasEstimate = await publicClient.estimateGas({
+      account: params.from as `0x${string}`,
+      to: params.to as `0x${string}`,
+      value: params.value ? BigInt(params.value) : undefined,
+      data: params.data as `0x${string}` | undefined,
+    });
+    
+    // Add 10% buffer to gas estimate
+    const bufferedGas = (gasEstimate * 110n) / 100n;
+    return bufferedGas.toString();
+  } catch (error) {
+    console.error('Gas estimation failed:', error);
+    // Return reasonable defaults
+    return params.data ? '150000' : '21000';
+  }
+};
+
+/**
  * Simulate transaction using Alchemy's simulation API
  */
 export const simulateTransaction = async (params: TransactionParams): Promise<SimulationResult> => {
@@ -149,8 +181,29 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
     // Get current gas prices
     const gasPrices = await getCurrentGasPrices();
     
-    // For ETH transfers, use standard gas limit
-    const gasLimit = params.tokenAddress ? '100000' : '21000';
+    // Estimate gas using Alchemy's eth_estimateGas
+    let gasLimit: string;
+    if (params.data) {
+      // For contract interactions, use eth_estimateGas
+      gasLimit = await estimateTransactionGas({
+        from: params.from,
+        to: params.to,
+        value: params.value,
+        data: params.data
+      });
+    } else if (params.tokenAddress) {
+      // For token transfers, build the data and estimate
+      const transferData = buildERC20TransferData(params.to, params.tokenAmount!);
+      gasLimit = await estimateTransactionGas({
+        from: params.from,
+        to: params.tokenAddress,
+        value: '0',
+        data: transferData
+      });
+    } else {
+      // For ETH transfers, use standard gas limit
+      gasLimit = '21000';
+    }
     
     // Build basic asset changes for ETH transfers (skip Alchemy simulation to avoid rate limits)
     const assetChanges: AssetChange[] = [];
