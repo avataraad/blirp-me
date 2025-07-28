@@ -22,7 +22,8 @@
       "Bash(npx react-native run-ios:*)",
       "WebFetch(domain:docs.bungee.exchange)",
       "Bash(lsof:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "WebFetch(domain:docs.socket.tech)"
     ],
     "deny": []
   }

@@ -128,7 +128,7 @@ export const getBungeeQuote = async (
 ): Promise<BungeeQuoteResponse> => {
   // TODO: Remove this when Bungee API is properly configured
   // For now, use mock service due to parameter validation errors
-  if (true) {
+  if (false) {
     console.log('Using mock service while Bungee API parameters are being debugged');
     return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
   }
@@ -161,6 +161,7 @@ export const getBungeeQuote = async (
     console.log('Amount Wei:', amountWei);
     console.log('Request URL:', `${BUNGEE_API_URL}/api/v1/bungee/quote`);
 
+    // Use the original endpoint
     const response = await bungeeApi.get('/api/v1/bungee/quote', { params });
     
     console.log('Bungee API response status:', response.status);
@@ -193,126 +194,87 @@ export const getBungeeQuote = async (
     // The API might return data directly or wrapped in result
     let result = response.data.result || response.data;
     
-    // If the result looks like it's just echoing our request params, it's not a valid quote
-    if (result.originChainId && result.destinationChainId && result.userAddress && !result.routes && !result.input) {
-      console.error('Bungee API returned request params instead of quote:', result);
-      throw createError(
-        ErrorType.QUOTE_FAILED,
-        'No routes available for this trade',
-        'API did not return quote data',
-        undefined,
-        true
-      );
-    }
-    
-    // Check if result has the expected structure
-    if (!result || (!result.input && !result.routes)) {
+    // Check if we have the expected Bungee API response structure
+    if (!result || !result.input || !result.input.token) {
       console.error('Invalid Bungee API result structure:', JSON.stringify(result, null, 2));
       console.error('Full response data:', JSON.stringify(response.data, null, 2));
       throw createError(
         ErrorType.QUOTE_FAILED,
         'Invalid quote response from Bungee API',
-        'Missing quote data in response',
+        'Missing input data in response',
         undefined,
         true
       );
     }
     
-    // Handle different possible response formats
-    let transformedResponse: BungeeQuoteResponse;
-    
-    // If we have routes array directly
-    if (result.routes && Array.isArray(result.routes)) {
-      transformedResponse = {
-        routes: result.routes.map((route: any) => ({
-          routeId: route.routeId || route.id || 'bungee-route',
-          fromAmount: route.fromAmount || amountWei,
-          toAmount: route.toAmount || '0',
-          estimatedGas: route.estimatedGas || '200000',
-          estimatedGasFeesInUsd: parseFloat(route.estimatedGasFeesInUsd || route.gasFee || '5'),
-          routePath: route.routePath || ['Bungee Protocol'],
-          exchangeRate: route.exchangeRate || 1,
-          priceImpact: route.priceImpact || -0.3,
-          slippage: route.slippage || slippage,
-          bridgeFee: route.bridgeFee || 0,
-          bridgeFeeInUsd: route.bridgeFeeInUsd || 0,
-          outputAmountMin: route.outputAmountMin || route.minAmountOut || '0',
-          executionDuration: route.executionDuration || 30
-        })),
-        fromToken: result.fromToken || {
-          address: fromToken.address,
-          symbol: fromToken.symbol,
-          decimals: fromToken.decimals,
-          name: fromToken.name,
-          logoURI: fromToken.logoURI,
-          chainId: ETHEREUM_CHAIN_ID
-        },
-        toToken: result.toToken || {
-          address: toToken.address,
-          symbol: toToken.symbol,
-          decimals: toToken.decimals,
-          name: toToken.name,
-          logoURI: toToken.logoURI,
-          chainId: ETHEREUM_CHAIN_ID
-        },
-        fromAmount: result.fromAmount || amountWei,
-        toAmount: result.toAmount || result.routes[0]?.toAmount || '0',
-        estimatedGas: result.estimatedGas || '200000',
-        status: 'success'
-      };
-    } 
-    // If we have input/output format
-    else if (result.input && result.output) {
-      transformedResponse = {
-        routes: [{
-          routeId: result.quoteId || 'bungee-route',
-          fromAmount: result.input.amount || amountWei,
-          toAmount: result.output.amount || '0',
-          estimatedGas: '200000',
-          estimatedGasFeesInUsd: parseFloat(result.gasFee || '5'),
-          routePath: ['Bungee Protocol'],
-          exchangeRate: (result.output.priceInUsd && result.input.priceInUsd) 
-            ? parseFloat(result.output.priceInUsd) / parseFloat(result.input.priceInUsd)
-            : 1,
-          priceImpact: -0.3,
-          slippage: parseFloat(result.slippage || slippage.toString()),
-          bridgeFee: 0,
-          bridgeFeeInUsd: 0,
-          outputAmountMin: result.minAmountOut || result.output.amount || '0',
-          executionDuration: parseInt(result.estimatedTime || '30')
-        }],
-        fromToken: {
-          address: result.input.token?.address || fromToken.address,
-          symbol: result.input.token?.symbol || fromToken.symbol,
-          decimals: result.input.token?.decimals || fromToken.decimals,
-          name: result.input.token?.name || fromToken.name,
-          logoURI: result.input.token?.logoURI || result.input.token?.icon || fromToken.logoURI,
-          chainId: ETHEREUM_CHAIN_ID
-        },
-        toToken: {
-          address: result.output.token?.address || toToken.address,
-          symbol: result.output.token?.symbol || toToken.symbol,
-          decimals: result.output.token?.decimals || toToken.decimals,
-          name: result.output.token?.name || toToken.name,
-          logoURI: result.output.token?.logoURI || result.output.token?.icon || toToken.logoURI,
-          chainId: ETHEREUM_CHAIN_ID
-        },
-        fromAmount: result.input.amount || amountWei,
-        toAmount: result.output.amount || '0',
-        estimatedGas: '200000',
-        status: 'success'
-      };
-    } else {
-      // Fallback - create a basic response
-      console.warn('Unexpected Bungee response format, using fallback');
+    // For same-chain swaps, we need to check autoRoute or manualRoutes
+    if (!result.autoRoute && (!result.manualRoutes || result.manualRoutes.length === 0)) {
+      console.error('No routes available in Bungee response:', result);
       throw createError(
         ErrorType.QUOTE_FAILED,
-        'Unable to parse quote response',
-        'Unexpected response format',
+        'No routes available for this trade',
+        'No liquidity found',
         undefined,
-        true
+        false
       );
     }
+    
+    // Handle Bungee API response format
+    // The response contains input info and routes (autoRoute or manualRoutes)
+    const routes = result.autoRoute ? [result.autoRoute] : result.manualRoutes || [];
+    
+    if (routes.length === 0) {
+      throw createError(
+        ErrorType.QUOTE_FAILED,
+        'No routes available for this trade',
+        'No routes in response',
+        undefined,
+        false
+      );
+    }
+    
+    // For now, we'll use the first route
+    const selectedRoute = routes[0];
+    
+    // Transform to our expected format
+    const transformedResponse: BungeeQuoteResponse = {
+      routes: routes.map((route: any) => ({
+        routeId: route.routeId || route.id || `bungee-${Date.now()}`,
+        fromAmount: result.input.amount,
+        toAmount: route.toAmount || route.outputAmount || '0',
+        estimatedGas: route.estimatedGas || '200000',
+        estimatedGasFeesInUsd: route.totalGasFeesInUsd || 5,
+        routePath: route.usedDexName ? [route.usedDexName] : ['Bungee'],
+        exchangeRate: route.exchangeRate || 1,
+        priceImpact: route.priceImpact || 0,
+        slippage: slippage,
+        bridgeFee: route.bridgeFee?.amount || 0,
+        bridgeFeeInUsd: route.bridgeFee?.amountInUsd || 0,
+        outputAmountMin: route.minAmountOut || route.toAmount || '0',
+        executionDuration: route.serviceTime || 30
+      })),
+      fromToken: {
+        address: result.input.token.address,
+        symbol: result.input.token.symbol,
+        decimals: result.input.token.decimals,
+        name: result.input.token.name,
+        logoURI: result.input.token.logoURI || result.input.token.icon,
+        chainId: result.input.token.chainId
+      },
+      toToken: {
+        // For buy mode, we need to determine the output token from the route
+        address: toToken.address,
+        symbol: toToken.symbol,
+        decimals: toToken.decimals,
+        name: toToken.name,
+        logoURI: toToken.logoURI,
+        chainId: ETHEREUM_CHAIN_ID
+      },
+      fromAmount: result.input.amount,
+      toAmount: selectedRoute.toAmount || selectedRoute.outputAmount || '0',
+      estimatedGas: selectedRoute.estimatedGas || '200000',
+      status: 'success'
+    };
 
     return transformedResponse;
   } catch (error) {
@@ -412,7 +374,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     // For now, return a simple mock that won't execute
     // This prevents actual ETH from being sent
     return {
@@ -461,7 +423,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (true) {
+  if (false) {
     return {
       status: 'COMPLETED',
       transactionHash,
