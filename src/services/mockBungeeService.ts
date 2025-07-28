@@ -29,12 +29,13 @@ export const getMockQuote = async (
     // USDC (6 decimals) to ETH (18 decimals) at $3800/ETH
     toAmountNum = (fromAmountNum * BigInt(10 ** toToken.decimals)) / (3800n * BigInt(10 ** fromToken.decimals));
   } else if (fromToken.symbol === 'ETH' && toToken.symbol === 'cbBTC') {
-    // ETH to BTC at 0.06 BTC/ETH rate
-    // BTC has 8 decimals
-    toAmountNum = (fromAmountNum * 6n * BigInt(10 ** (toToken.decimals - 2))) / BigInt(10 ** fromToken.decimals);
+    // ETH to BTC at 0.06 BTC/ETH rate (1 ETH = 0.06 BTC)
+    // ETH has 18 decimals, BTC has 8 decimals
+    // We need to multiply by 0.06 and adjust for decimal difference
+    toAmountNum = (fromAmountNum * 6n * BigInt(10 ** toToken.decimals)) / (100n * BigInt(10 ** fromToken.decimals));
   } else if (fromToken.symbol === 'cbBTC' && toToken.symbol === 'ETH') {
-    // BTC to ETH
-    toAmountNum = (fromAmountNum * BigInt(10 ** (toToken.decimals + 2))) / (6n * BigInt(10 ** fromToken.decimals));
+    // BTC to ETH at 1/0.06 = 16.67 ETH/BTC rate
+    toAmountNum = (fromAmountNum * 1667n * BigInt(10 ** toToken.decimals)) / (100n * BigInt(10 ** fromToken.decimals));
   } else if (fromToken.symbol === 'ETH' && toToken.symbol === 'wXRP') {
     // ETH to wXRP at ~5000 XRP/ETH
     toAmountNum = (fromAmountNum * 5000n * BigInt(10 ** toToken.decimals)) / BigInt(10 ** fromToken.decimals);
@@ -44,14 +45,29 @@ export const getMockQuote = async (
   }
   
   const toAmount = toAmountNum.toString();
-  const exchangeRate = Number(toAmountNum) / Number(fromAmountNum);
+  
+  // Calculate exchange rate properly accounting for decimals
+  let exchangeRate = 1;
+  if (fromToken.symbol === 'ETH' && toToken.symbol === 'cbBTC') {
+    exchangeRate = 0.06;
+  } else if (fromToken.symbol === 'cbBTC' && toToken.symbol === 'ETH') {
+    exchangeRate = 16.67;
+  } else if (fromToken.symbol === 'ETH' && toToken.symbol === 'USDC') {
+    exchangeRate = 3800;
+  } else if (fromToken.symbol === 'USDC' && toToken.symbol === 'ETH') {
+    exchangeRate = 1 / 3800;
+  } else if (fromToken.symbol === 'ETH' && toToken.symbol === 'wXRP') {
+    exchangeRate = 5000;
+  } else if (fromToken.symbol === 'ETH' && toToken.symbol === 'stETH') {
+    exchangeRate = 0.998;
+  }
   
   const route: BungeeRoute = {
     routeId: 'mock-route-' + Date.now(),
     fromAmount: amountWei,
     toAmount: toAmount,
     estimatedGas: '150000',
-    estimatedGasFeesInUsd: 25.50,
+    estimatedGasFeesInUsd: 5.50,
     routePath: ['Uniswap V3'],
     exchangeRate: exchangeRate,
     priceImpact: -0.3,

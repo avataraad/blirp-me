@@ -331,10 +331,12 @@ export const buildBungeeTransaction = async (
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
   if (true) {
+    // For now, return a simple mock that won't execute
+    // This prevents actual ETH from being sent
     return {
       to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
       data: '0x' + '0'.repeat(64), // Mock transaction data
-      value: '0',
+      value: '0', // Always 0 for mock to prevent real ETH sends
       gasLimit: '200000',
       chainId: 1
     };

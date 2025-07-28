@@ -140,6 +140,20 @@ export const executeTrade = async (
   try {
     const { routeId, route, fromToken, toToken, userAddress, slippage } = params;
     
+    // MOCK MODE: Return success without executing real transaction
+    if (true) { // TODO: Remove when ready for real trades
+      console.log('🧪 MOCK MODE: Simulating successful trade execution');
+      const mockTxHash = '0x' + Math.random().toString(16).substring(2) + Date.now().toString(16);
+      
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      return {
+        transactionHash: mockTxHash,
+        status: 'pending'
+      };
+    }
+    
     // Step 1: Build the transaction via Bungee
     console.log('🔄 Building Bungee transaction...');
     const bungeeTransaction = await buildBungeeTransaction(
