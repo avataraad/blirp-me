@@ -412,7 +412,7 @@ export const buildBungeeTransaction = async (
   slippage: number = 1
 ): Promise<BungeeTransactionResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     // For now, return a simple mock that won't execute
     // This prevents actual ETH from being sent
     return {
@@ -461,7 +461,7 @@ export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
   // TODO: Remove mock when API is configured
-  if (false) {
+  if (true) {
     return {
       status: 'COMPLETED',
       transactionHash,
