@@ -206,8 +206,17 @@ export const executeManualTrade = async (
     
     // Step 2: Check if approval is needed from the build-tx response
     if (buildResult.approvalData) {
-      console.log('🔍 Token approval required for manual trade...', buildResult.approvalData);
+      console.log('🔍 Token approval required for manual trade...', JSON.stringify(buildResult.approvalData, null, 2));
       setExecutionStatus?.('Checking token approval...');
+      
+      // Debug: Log the approval check parameters
+      console.log('Approval check parameters:', {
+        tokenAddress: buildResult.approvalData.tokenAddress,
+        userAddress: userAddress,
+        spenderAddress: buildResult.approvalData.spenderAddress,
+        amount: buildResult.approvalData.amount,
+        amountWei: amountWei
+      });
       
       const approvalNeeded = await needsApproval(
         buildResult.approvalData.tokenAddress as `0x${string}`,
@@ -255,6 +264,14 @@ export const executeManualTrade = async (
     
     // Step 3: Now execute the actual trade transaction
     const txData = buildResult.transactionData;
+    
+    console.log('📋 Transaction data from build-tx:', {
+      to: txData.to,
+      value: txData.value,
+      hasData: !!txData.data,
+      dataLength: txData.data?.length,
+      gasLimit: txData.gasLimit
+    });
     
     // Step 3: Sign and send the transaction
     console.log('📝 Signing transaction...');

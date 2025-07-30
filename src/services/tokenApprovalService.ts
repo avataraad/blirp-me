@@ -127,6 +127,12 @@ export const needsApproval = async (
   amount: bigint
 ): Promise<boolean> => {
   try {
+    console.log('needsApproval called with:', {
+      tokenAddress,
+      ownerAddress,
+      spenderAddress,
+      amount: amount.toString()
+    });
     const currentAllowance = await checkAllowance({
       tokenAddress,
       userAddress: ownerAddress,
@@ -134,7 +140,14 @@ export const needsApproval = async (
       amount
     });
     
-    return currentAllowance < amount;
+    const needsApproval = currentAllowance < amount;
+    console.log('needsApproval result:', {
+      currentAllowance: currentAllowance.toString(),
+      requiredAmount: amount.toString(),
+      needsApproval
+    });
+    
+    return needsApproval;
   } catch (error) {
     console.error('Error checking approval need:', error);
     // Assume approval is needed if we can't check
