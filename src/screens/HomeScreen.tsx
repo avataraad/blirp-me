@@ -31,7 +31,7 @@ type Props = {
 };
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
-  const { walletAddress } = useWallet();
+  const { walletAddress, logout } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [balanceData, setBalanceData] = useState<WalletBalanceResponse | null>(null);
@@ -67,6 +67,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     setRefreshing(true);
     fetchBalances();
   }, [fetchBalances]);
+
+  const handleSignOut = () => {
+    logout();
+  };
 
   // Asset mapping with custom names from Issue #38
   const getAssetsBySection = () => {
@@ -114,8 +118,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity style={styles.headerIcon}>
             <Icon name="chatbubble-outline" size={24} color={theme.colors.text.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Icon name="person-outline" size={24} color={theme.colors.text.primary} />
+          <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
+            <Icon name="log-out-outline" size={24} color={theme.colors.text.primary} />
           </TouchableOpacity>
         </View>
       </View>
