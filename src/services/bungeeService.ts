@@ -367,19 +367,16 @@ export const getBungeeQuote = async (
 /**
  * Get the best route from quote response
  * @param quoteResponse - Quote response from Bungee
- * @returns Best route based on output amount
+ * @returns First route (usually optimized for gas efficiency)
  */
 export const getBestRoute = (quoteResponse: BungeeQuoteResponse): BungeeRoute => {
   if (!quoteResponse.routes || quoteResponse.routes.length === 0) {
     throw new Error('No routes available');
   }
 
-  // Sort by output amount (descending) and return the best
-  const sortedRoutes = [...quoteResponse.routes].sort((a, b) => {
-    return BigInt(b.toAmount) > BigInt(a.toAmount) ? 1 : -1;
-  });
-
-  return sortedRoutes[0];
+  // Return the first route instead of sorting by output amount
+  // The first route is typically optimized for gas efficiency
+  return quoteResponse.routes[0];
 };
 
 export interface ManualBuildResult {

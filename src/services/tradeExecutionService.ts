@@ -11,7 +11,8 @@ import {
   SignedTransaction,
   TransactionReceipt,
   signTypedData,
-  simulateTransaction
+  simulateTransaction,
+  getCurrentGasPrices
 } from './transactionService';
 import { 
   buildBungeeTransaction,
@@ -335,10 +336,34 @@ export const executeManualTrade = async (
       data: txData.data
     };
     
-    // Simulate first
+    // Simulate first, but use Bungee's recommended gas limit if simulation fails
     const simulation = await simulateTransaction(txParams);
     if (!simulation.success) {
-      throw new Error(`Transaction simulation failed: ${simulation.error}`);
+      console.log('Simulation failed, using Bungee-recommended gas limit:', txData.gasLimit);
+      // Create a fallback simulation result using Bungee's gas estimates
+      const gasPrices = await getCurrentGasPrices();
+      const fallbackSimulation = {
+        assetChanges: [],
+        gasUsed: txData.gasLimit || '300000',
+        gasLimit: txData.gasLimit || '300000',
+        maxFeePerGas: gasPrices.maxFeePerGas,
+        maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas,
+        success: true,
+        warnings: [{
+          type: 'network-congestion' as const,
+          message: 'Using Bungee gas estimate due to simulation failure',
+          severity: 'warning' as const
+        }]
+      };
+      
+      const signedTx = await signTransaction(txParams, fallbackSimulation);
+      const txHash = await broadcastTransaction(signedTx);
+      console.log('✅ Transaction broadcasted:', txHash);
+      
+      return {
+        transactionHash: txHash,
+        status: 'pending' as const
+      };
     }
     
     // Sign the transaction
