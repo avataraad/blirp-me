@@ -225,6 +225,38 @@ export const executeManualTrade = async (
         BigInt(buildResult.approvalData.amount)
       );
       
+      // Also check token balance
+      const publicClient = getPublicClient(config, { chainId: 1 });
+      if (publicClient) {
+        try {
+          const balanceResult = await publicClient.readContract({
+            address: buildResult.approvalData.tokenAddress as `0x${string}`,
+            abi: [{
+              inputs: [{ name: "account", type: "address" }],
+              name: "balanceOf",
+              outputs: [{ name: "", type: "uint256" }],
+              stateMutability: "view",
+              type: "function"
+            }],
+            functionName: "balanceOf",
+            args: [userAddress as `0x${string}`]
+          });
+          
+          console.log('💰 Token balance check:', {
+            tokenAddress: buildResult.approvalData.tokenAddress,
+            userBalance: balanceResult.toString(),
+            requiredAmount: buildResult.approvalData.amount,
+            hasEnoughBalance: BigInt(balanceResult) >= BigInt(buildResult.approvalData.amount)
+          });
+          
+          if (BigInt(balanceResult) < BigInt(buildResult.approvalData.amount)) {
+            throw new Error(`Insufficient token balance. Have: ${balanceResult}, Need: ${buildResult.approvalData.amount}`);
+          }
+        } catch (error) {
+          console.error('Failed to check token balance:', error);
+        }
+      }
+      
       if (approvalNeeded) {
         console.log('📝 Executing token approval...');
         setExecutionStatus?.('Approving token...');
