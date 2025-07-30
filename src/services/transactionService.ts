@@ -544,6 +544,26 @@ export const broadcastTransaction = async (
     return hash;
   } catch (error) {
     console.error('Transaction broadcast failed:', error);
+    
+    // Check if it's an insufficient funds error
+    if (error instanceof Error && error.message.includes('insufficient funds')) {
+      // Extract the amounts from the error message
+      const match = error.message.match(/have (\d+) want (\d+)/);
+      if (match) {
+        const have = BigInt(match[1]);
+        const want = BigInt(match[2]);
+        const shortage = want - have;
+        
+        const haveETH = (Number(have) / 1e18).toFixed(6);
+        const wantETH = (Number(want) / 1e18).toFixed(6);
+        const shortageETH = (Number(shortage) / 1e18).toFixed(6);
+        
+        throw new Error(
+          `Insufficient ETH for gas fees. Have: ${haveETH} ETH, Need: ${wantETH} ETH (Short by ${shortageETH} ETH)`
+        );
+      }
+    }
+    
     throw new Error(error instanceof Error ? error.message : 'Failed to broadcast transaction');
   }
 };

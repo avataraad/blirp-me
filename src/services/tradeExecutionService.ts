@@ -225,10 +225,22 @@ export const executeManualTrade = async (
         BigInt(buildResult.approvalData.amount)
       );
       
-      // Also check token balance
+      // Check ETH balance for gas
       const publicClient = getPublicClient(config, { chainId: 1 });
       if (publicClient) {
         try {
+          // Check ETH balance first
+          const ethBalance = await publicClient.getBalance({
+            address: userAddress as `0x${string}`
+          });
+          
+          console.log('💰 ETH balance check:', {
+            ethBalance: ethBalance.toString(),
+            ethBalanceFormatted: (Number(ethBalance) / 1e18).toFixed(6) + ' ETH',
+            estimatedGasNeeded: '~0.002 ETH'
+          });
+          
+          // Then check token balance
           const balanceResult = await publicClient.readContract({
             address: buildResult.approvalData.tokenAddress as `0x${string}`,
             abi: [{
