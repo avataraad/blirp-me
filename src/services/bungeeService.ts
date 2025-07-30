@@ -6,7 +6,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { VerifiedToken } from '../config/tokens';
 import { createError, ErrorType } from './errorHandling';
-import { getMockQuote } from './mockBungeeService';
 
 // Bungee public API endpoint
 const BUNGEE_API_URL = 'https://public-backend.bungee.exchange';
@@ -126,6 +125,7 @@ const getBungeeTokenAddress = (token: VerifiedToken): string => {
  * @param amountWei - Amount in smallest unit
  * @param userAddress - User's wallet address
  * @param slippage - Slippage tolerance (default 1%)
+ * @param enableManual - Enable manual routes (default true)
  * @returns Quote response with routes
  */
 export const getBungeeQuote = async (
@@ -133,14 +133,9 @@ export const getBungeeQuote = async (
   toToken: VerifiedToken,
   amountWei: string,
   userAddress: string,
-  slippage: number = 1
+  slippage: number = 1,
+  enableManual: boolean = true
 ): Promise<BungeeQuoteResponse> => {
-  // TODO: Remove this when Bungee API is properly configured
-  // For now, use mock service due to parameter validation errors
-  if (false) {
-    console.log('Using mock service while Bungee API parameters are being debugged');
-    return getMockQuote(fromToken, toToken, amountWei, userAddress, slippage);
-  }
   
   try {
     // Validate inputs
@@ -162,6 +157,7 @@ export const getBungeeQuote = async (
       inputAmount: amountWei,
       receiverAddress: userAddress, // Same as userAddress for same-chain swaps
       outputToken: getBungeeTokenAddress(toToken),
+      enableManual: enableManual,
     };
 
     console.log('Bungee API request params:', JSON.stringify(params, null, 2));
@@ -282,8 +278,8 @@ export const getBungeeQuote = async (
         chainId: result.input.token.chainId
       },
       toToken: {
-        // Get output token from the route
-        address: selectedRoute.output?.token?.address || toToken.address,
+        // Get output token from the route, ensure native ETH address is used correctly
+        address: selectedRoute.output?.token?.address || getBungeeTokenAddress(toToken),
         symbol: selectedRoute.output?.token?.symbol || toToken.symbol,
         decimals: selectedRoute.output?.token?.decimals || toToken.decimals,
         name: selectedRoute.output?.token?.name || toToken.name,
@@ -399,18 +395,6 @@ export const buildBungeeTransaction = async (
   quoteResponse?: BungeeQuoteResponse,
   userSignature?: string
 ): Promise<BungeeTransactionResponse> => {
-  // TODO: Remove mock when API is configured
-  if (false) {
-    // For now, return a simple mock that won't execute
-    // This prevents actual ETH from being sent
-    return {
-      to: '0x3a23F943181408EAC424116Af7b7790c94Cb97a5', // Mock Bungee router
-      data: '0x' + '0'.repeat(64), // Mock transaction data
-      value: '0', // Always 0 for mock to prevent real ETH sends
-      gasLimit: '200000',
-      chainId: 1
-    };
-  }
   
   try {
     if (!quoteResponse || !quoteResponse.originalResult) {
@@ -420,12 +404,21 @@ export const buildBungeeTransaction = async (
     const originalResult = quoteResponse.originalResult;
     const selectedRoute = quoteResponse.routes.find(r => r.routeId === routeId) || quoteResponse.routes[0];
     
-    // For autoRoute, if userOp is "sign", we need the user's signature
+    // Debug: Check if addresses are being lowercased
+    console.log('Debug - Token addresses from quote:', {
+      fromQuoteResponse: quoteResponse.toToken.address,
+      fromOriginalResult: originalResult.output?.token?.address,
+      fromSelectedRoute: selectedRoute.output?.token?.address,
+      expectedETH: NATIVE_ETH_ADDRESS
+    });
+    
+    // For Permit2 flow (userOp is "sign"), we need the user's signature
     if (selectedRoute.userOp === 'sign' && !userSignature) {
-      // Return the sign data so the UI can prompt for signature
+      console.log('Permit2 flow detected, returning signature data');
+      // Return the sign data so the caller can prompt for signature
       return {
         to: '', // No transaction yet
-        data: JSON.stringify(selectedRoute.signTypedData), // Return sign data
+        data: '', // No transaction data yet
         value: '0',
         gasLimit: selectedRoute.estimatedGas,
         chainId: originalResult.originChainId,
@@ -434,41 +427,108 @@ export const buildBungeeTransaction = async (
       } as any;
     }
     
-    // Build the submit request based on the example
-    const submitRequest = {
-      request: {
-        basicReq: {
-          originChainId: originalResult.originChainId,
-          destinationChainId: originalResult.destinationChainId,
-          deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-          nonce: Date.now().toString(),
-          sender: userAddress,
-          receiver: originalResult.receiverAddress,
-          delegate: userAddress,
-          bungeeGateway: selectedRoute.approvalData?.spenderAddress || '0x3a23F943181408EAC424116Af7b7790c94Cb97a5',
-          switchboardId: 1,
-          inputToken: originalResult.input.token.address,
-          inputAmount: originalResult.input.amount,
-          outputToken: selectedRoute.output?.token?.address || originalResult.input.token.address,
-          minOutputAmount: selectedRoute.outputAmountMin || selectedRoute.output?.minAmountOut || '0',
-          refuelAmount: '0'
-        },
-        swapOutputToken: '0x0000000000000000000000000000000000000000',
-        minSwapOutput: '0',
-        metadata: '0x0000000000000000000000000000000000000000000000000000000000000000',
-        affiliateFees: '0x',
-        minDestGas: '0',
-        destinationPayload: originalResult.destinationExec?.destinationPayload || '0x',
-        exclusiveTransmitter: '0x0000000000000000000000000000000000000000'
-      },
-      userSignature: userSignature || '0x', // Empty if not required
-      requestType: selectedRoute.requestType || 'SINGLE_OUTPUT_REQUEST',
-      quoteId: routeId
+    const requestType = selectedRoute.requestType || 'SINGLE_OUTPUT_REQUEST';
+    
+    // Build the submit request based on the API documentation
+    // Create basicReq object first
+    const basicReq = {
+      // Common fields for both request types
+      deadline: (Math.floor(Date.now() / 1000) + 3600).toString(), // 1 hour from now, as string
+      nonce: Date.now().toString(),
+      sender: userAddress,
+      receiver: originalResult.receiverAddress || userAddress,
+      delegate: userAddress,
+      bungeeGateway: selectedRoute.approvalData?.spenderAddress || selectedRoute.approvalData?.approvalAddress || '0x3a23F943181408EAC424116Af7b7790c94Cb97a5',
+      // For SWAP_REQUEST, we need chainId. For SINGLE_OUTPUT_REQUEST, we need originChainId/destinationChainId
+      ...(requestType === 'SWAP_REQUEST' ? {
+        chainId: Number(originalResult.originChainId) || 1, // Just chainId for same-chain swaps
+      } : {
+        originChainId: Number(originalResult.originChainId) || 1,
+        destinationChainId: Number(originalResult.destinationChainId) || 1,
+        switchboardId: 1,
+      }),
+      // For input token, also check if it's ETH and use the proper address
+      inputToken: (() => {
+        const inputAddr = originalResult.input.token.address;
+        if (inputAddr === '0x0000000000000000000000000000000000000000' || 
+            inputAddr.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+          return NATIVE_ETH_ADDRESS;
+        }
+        return inputAddr;
+      })(),
+      inputAmount: originalResult.input.amount,
+      // For output token, check if it's ETH and use the proper address
+      outputToken: (() => {
+        const outputAddr = selectedRoute.output?.token?.address || quoteResponse.toToken.address;
+        // If the address is all zeros or matches a lowercase ETH pattern, use the proper ETH address
+        if (outputAddr === '0x0000000000000000000000000000000000000000' || 
+            outputAddr.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+          return NATIVE_ETH_ADDRESS;
+        }
+        return outputAddr;
+      })(),
+      minOutputAmount: selectedRoute.outputAmountMin || selectedRoute.output?.minAmountOut || '0',
+      refuelAmount: '0'
     };
 
-    console.log('Submitting to Bungee:', JSON.stringify(submitRequest, null, 2));
+    // Build the complete request object based on requestType
+    // For SWAP_REQUEST, we need swapRequest structure
+    const request = requestType === 'SWAP_REQUEST' ? {
+      basicReq,
+      swapOutputToken: selectedRoute.swapOutputToken || '0x0000000000000000000000000000000000000000',
+      minSwapOutput: selectedRoute.minSwapOutput || '0',
+      metadata: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      affiliateFees: '0x',
+      minDestGas: '0',
+      destinationPayload: originalResult.destinationExec?.destinationPayload || '0x',
+      exclusiveTransmitter: '0x0000000000000000000000000000000000000000'
+    } : {
+      // SingleOutputRequestDto
+      basicReq,
+      // For single output, these fields should be part of basicReq or not included
+      metadata: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      affiliateFees: '0x',
+      minDestGas: '0',
+      destinationPayload: originalResult.destinationExec?.destinationPayload || '0x',
+      exclusiveTransmitter: '0x0000000000000000000000000000000000000000'
+    };
     
-    const response = await bungeeApi.post('/api/v1/bungee/submit', submitRequest);
+    const submitRequest = {
+      request,
+      userSignature: userSignature || '0x', // Empty if not required
+      requestType,
+      quoteId: selectedRoute.quoteId || selectedRoute.routeId || routeId
+      // Removed chainId from body since we're passing it in URL
+    };
+
+    // For SWAP_REQUEST, chainId is in the body. For SINGLE_OUTPUT_REQUEST, it might be needed in URL
+    const submitUrl = `/api/v1/bungee/submit`;
+    
+    // Comprehensive logging of the entire request
+    console.log('================== BUNGEE QUOTE RESPONSE ==================');
+    console.log('Original Quote Result:', JSON.stringify(originalResult, null, 2));
+    console.log('Selected Route:', JSON.stringify(selectedRoute, null, 2));
+    console.log('Quote Response Tokens:', {
+      fromToken: quoteResponse.fromToken,
+      toToken: quoteResponse.toToken,
+      fromAmount: quoteResponse.fromAmount,
+      toAmount: quoteResponse.toAmount
+    });
+    console.log('================== BUNGEE SUBMIT REQUEST ==================');
+    console.log('URL:', `${BUNGEE_API_URL}${submitUrl}`);
+    console.log('Method: POST');
+    console.log('Query Params:', 'None');
+    console.log('Request Body:', JSON.stringify(submitRequest, null, 2));
+    console.log('Token Mapping:', {
+      inputToken: submitRequest.request.basicReq.inputToken,
+      outputToken: submitRequest.request.basicReq.outputToken,
+      expectedOutputToken: quoteResponse.toToken.address
+    });
+    console.log('Request Type:', requestType);
+    console.log('Quote ID:', selectedRoute.quoteId || selectedRoute.routeId || routeId);
+    console.log('==========================================================');
+    
+    const response = await bungeeApi.post(submitUrl, submitRequest);
     
     console.log('Bungee submit response:', JSON.stringify(response.data, null, 2));
     
@@ -503,11 +563,27 @@ export const buildBungeeTransaction = async (
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error('Bungee submit error response:', error.response?.data);
+      console.error('Full error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data ? JSON.parse(error.config.data) : null,
+          params: error.config?.params
+        }
+      });
+      
       if (error.response?.status === 400) {
         throw new Error(error.response.data?.message || 'Invalid submit request');
       }
       if (error.response?.status === 404) {
         throw new Error('Quote expired or not found');
+      }
+      if (error.response?.status === 500) {
+        const errorMessage = error.response.data?.message || error.response.data?.error || 'Server error';
+        throw new Error(`Bungee API error: ${errorMessage}`);
       }
     }
     
@@ -524,16 +600,6 @@ export const buildBungeeTransaction = async (
 export const checkBungeeTransactionStatus = async (
   transactionHash: string
 ): Promise<BungeeStatusResponse> => {
-  // TODO: Remove mock when API is configured
-  if (false) {
-    return {
-      status: 'COMPLETED',
-      transactionHash,
-      fromAmount: '1000000000000000000',
-      toAmount: '3800000000',
-      error: undefined
-    };
-  }
   
   try {
     const params: BungeeStatusRequest = {
