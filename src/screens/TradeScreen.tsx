@@ -55,6 +55,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const [ethPrice, setEthPrice] = useState<number>(0);
   const [gasEstimate, setGasEstimate] = useState<TradeGasEstimate | null>(null);
   const [isEstimatingGas, setIsEstimatingGas] = useState(false);
+  const [isMaxAmount, setIsMaxAmount] = useState(false);
   
   // Load tokens and prices
   useEffect(() => {
@@ -159,6 +160,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   }, [ethBalance, gasEstimate]);
   
   const handleMaxPress = () => {
+    setIsMaxAmount(true);
     if (tradeMode === 'buy') {
       setAmountUSD(getMaxBuyAmount());
     } else {
@@ -171,6 +173,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     setShowTokenSelector(false);
     // Reset amount when token changes
     setAmountUSD('');
+    setIsMaxAmount(false);
   };
   
   const handleTradeModeChange = (mode: TradeMode) => {
@@ -212,23 +215,52 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     } else {
       // For selling, we need to handle the conversion more carefully
       if (selectedToken.isNative) {
-        // For ETH, convert USD to ETH amount
-        const ethAmount = usdAmount / ethPrice;
-        amountWei = parseEther(ethAmount.toString()).toString();
+        if (isMaxAmount && selectedToken.balance) {
+          // Use exact ETH balance for max trades
+          amountWei = selectedToken.balance.toString();
+          console.log('Using exact ETH balance for max trade:', {
+            balance: selectedToken.balance,
+            amountWei
+          });
+        } else {
+          // For ETH, convert USD to ETH amount
+          const ethAmount = usdAmount / ethPrice;
+          amountWei = parseEther(ethAmount.toString()).toString();
+        }
       } else {
-        // For tokens, convert USD to token amount
-        const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
-        // Ensure we have enough precision for the conversion
-        const tokenAmountString = tokenAmount.toFixed(selectedToken.decimals);
-        amountWei = parseUnits(tokenAmountString, selectedToken.decimals).toString();
+        // For tokens, use exact balance if this is a max trade
+        if (isMaxAmount && selectedToken.balance) {
+          // Use the exact token balance for max trades
+          amountWei = selectedToken.balance.toString();
+          console.log('Using exact token balance for max trade:', {
+            token: selectedToken.symbol,
+            balance: selectedToken.balance,
+            amountWei
+          });
+        } else {
+          // For partial trades, convert USD to token amount
+          const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
+          // Ensure we have enough precision for the conversion
+          const tokenAmountString = tokenAmount.toFixed(selectedToken.decimals);
+          amountWei = parseUnits(tokenAmountString, selectedToken.decimals).toString();
+          
+          // Ensure we don't exceed the balance
+          if (selectedToken.balance && BigInt(amountWei) > BigInt(selectedToken.balance)) {
+            console.log('Amount exceeds balance, using balance instead:', {
+              requested: amountWei,
+              balance: selectedToken.balance
+            });
+            amountWei = selectedToken.balance.toString();
+          }
+        }
         
         // Debug logging
         console.log('Token conversion:', {
           token: selectedToken.symbol,
           usdAmount,
           tokenPrice: selectedToken.usdPrice,
-          tokenAmount,
-          tokenAmountString,
+          isMaxAmount,
+          balance: selectedToken.balance,
           decimals: selectedToken.decimals,
           amountWei
         });
@@ -396,7 +428,10 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
               <TextInput
                 style={styles.amountInput}
                 value={amountUSD}
-                onChangeText={setAmountUSD}
+                onChangeText={(text) => {
+                  setAmountUSD(text);
+                  setIsMaxAmount(false);
+                }}
                 placeholder="0.00"
                 placeholderTextColor={theme.colors.text.tertiary}
                 keyboardType="decimal-pad"
