@@ -10,16 +10,26 @@ import {
   SimulationResult,
   SignedTransaction,
   TransactionReceipt,
-  signTypedData
+  signTypedData,
+  simulateTransaction
 } from './transactionService';
 import { 
   buildBungeeTransaction,
+  buildManualTransaction,
   BungeeRoute,
   BungeeTransactionResponse,
+  BungeeQuoteResponse,
   checkBungeeTransactionStatus
 } from './bungeeService';
+import { 
+  buildApprovalTransaction,
+  needsApproval,
+  ApprovalData
+} from './tokenApprovalService';
 import { VerifiedToken } from '../config/tokens';
 import { parseEther, encodeFunctionData } from 'viem';
+import { getPublicClient } from '@wagmi/core';
+import { config } from '../config/wagmi';
 import * as Keychain from 'react-native-keychain';
 
 export interface TradeExecutionParams {
@@ -31,6 +41,7 @@ export interface TradeExecutionParams {
   userAddress: string;
   slippage: number;
   quoteResponse: BungeeQuoteResponse; // Add the full quote response
+  tradeType: 'manual' | 'auto'; // Add trade type
 }
 
 export interface TradeExecutionResult {
@@ -70,11 +81,16 @@ export const executeTokenApproval = async (
   try {
     const { tokenAddress, spenderAddress, amount, userAddress } = params;
     
+    // Use Permit2 address if spender is "0"
+    const actualSpender = spenderAddress === "0" 
+      ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" 
+      : spenderAddress;
+    
     // Build approval transaction
     const approvalData = encodeFunctionData({
       abi: APPROVAL_ABI,
       functionName: 'approve',
-      args: [spenderAddress as `0x${string}`, BigInt(amount)]
+      args: [actualSpender as `0x${string}`, BigInt(amount)]
     });
     
     // Create transaction params
@@ -85,16 +101,14 @@ export const executeTokenApproval = async (
       data: approvalData
     };
     
-    // Simulate for gas estimation
-    const simulation: SimulationResult = {
-      assetChanges: [],
-      gasUsed: '50000',
-      gasLimit: '60000',
-      maxFeePerGas: '20000000000',
-      maxPriorityFeePerGas: '1500000000',
-      success: true,
-      warnings: []
-    };
+    // Properly simulate the transaction to get accurate gas estimates
+    console.log('Simulating approval transaction with params:', txParams);
+    const simulation = await simulateTransaction(txParams);
+    console.log('Simulation result:', simulation);
+    
+    if (!simulation.success) {
+      throw new Error(`Approval simulation failed: ${simulation.error || 'Unknown error'}`);
+    }
     
     // Sign the transaction
     const signedTx = await signTransaction(txParams, simulation);
@@ -116,7 +130,7 @@ export const executeTokenApproval = async (
  * Check if a token has sufficient approval
  * @param tokenAddress Token contract address
  * @param ownerAddress Token owner
- * @param spenderAddress Spender (Bungee Inbox)
+ * @param spenderAddress Spender (Permit2 or custom)
  * @param amount Required amount
  * @returns Whether approval is sufficient
  */
@@ -126,9 +140,192 @@ export const checkTokenAllowance = async (
   spenderAddress: string,
   amount: string
 ): Promise<boolean> => {
-  // For now, always return false to require approval
-  // In production, this would check the actual allowance on-chain
-  return false;
+  try {
+    const publicClient = getPublicClient(config, { chainId: 1 });
+    if (!publicClient) {
+      throw new Error('Failed to get public client');
+    }
+    
+    // ERC20 ABI for allowance function
+    const erc20Abi = [{
+      inputs: [
+        { name: "owner", type: "address" },
+        { name: "spender", type: "address" },
+      ],
+      name: "allowance",
+      outputs: [{ name: "", type: "uint256" }],
+      stateMutability: "view",
+      type: "function",
+    }];
+    
+    // Use Permit2 address if spender is "0"
+    const actualSpender = spenderAddress === "0" 
+      ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" 
+      : spenderAddress;
+    
+    const currentAllowance = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [ownerAddress as `0x${string}`, actualSpender as `0x${string}`],
+    }) as bigint;
+    
+    console.log('Current allowance:', currentAllowance.toString(), 'Required:', amount);
+    
+    return BigInt(currentAllowance) >= BigInt(amount);
+  } catch (error) {
+    console.error('Failed to check allowance:', error);
+    return false;
+  }
+};
+
+/**
+ * Execute a manual trade
+ * @param params Trade execution parameters
+ * @param setExecutionStatus Status callback
+ * @returns Execution result
+ */
+export const executeManualTrade = async (
+  params: TradeExecutionParams,
+  setExecutionStatus?: (status: string) => void
+): Promise<TradeExecutionResult> => {
+  try {
+    const { routeId, route, fromToken, toToken, userAddress, amountWei } = params;
+    
+    console.log('🔄 Starting manual trade execution...');
+    setExecutionStatus?.('Preparing manual trade...');
+    
+    // Step 1: Build the manual transaction first to get approval data
+    console.log('🔨 Building manual transaction...');
+    setExecutionStatus?.('Building transaction...');
+    
+    // Use routeId from the route object
+    const manualRouteId = route.routeId || routeId;
+    console.log('Manual route ID for build-tx:', manualRouteId);
+    const buildResult = await buildManualTransaction(manualRouteId);
+    
+    // Step 2: Check if approval is needed from the build-tx response
+    if (buildResult.approvalData) {
+      console.log('🔍 Token approval required for manual trade...', buildResult.approvalData);
+      setExecutionStatus?.('Checking token approval...');
+      
+      const approvalNeeded = await needsApproval(
+        buildResult.approvalData.tokenAddress as `0x${string}`,
+        userAddress as `0x${string}`,
+        buildResult.approvalData.spenderAddress as `0x${string}`,
+        BigInt(buildResult.approvalData.amount)
+      );
+      
+      if (approvalNeeded) {
+        console.log('📝 Executing token approval...');
+        setExecutionStatus?.('Approving token...');
+        
+        const approvalTx = await buildApprovalTransaction(1, {
+          tokenAddress: buildResult.approvalData.tokenAddress as `0x${string}`,
+          userAddress: userAddress as `0x${string}`,
+          spenderAddress: buildResult.approvalData.spenderAddress as `0x${string}`,
+          amount: BigInt(buildResult.approvalData.amount)
+        });
+        
+        if (approvalTx) {
+          // Sign and send approval transaction
+          const approvalParams = {
+            from: userAddress,
+            to: approvalTx.to,
+            value: '0',
+            data: approvalTx.data
+          };
+          
+          const simulation = await simulateTransaction(approvalParams);
+          if (!simulation.success) {
+            throw new Error(`Approval simulation failed: ${simulation.error}`);
+          }
+          
+          const signedApproval = await signTransaction(approvalParams, simulation);
+          const approvalHash = await broadcastTransaction(signedApproval);
+          
+          console.log('⏳ Waiting for approval confirmation...');
+          setExecutionStatus?.('Waiting for approval confirmation...');
+          await waitForTransaction(approvalHash, 1);
+          
+          console.log('✅ Token approved');
+        }
+      }
+    }
+    
+    // Step 3: Now execute the actual trade transaction
+    const txData = buildResult.transactionData;
+    
+    // Step 3: Sign and send the transaction
+    console.log('📝 Signing transaction...');
+    setExecutionStatus?.('Please sign the transaction...');
+    
+    // Convert hex value to decimal string if needed
+    let valueInWei = '0';
+    if (txData.value && txData.value !== '0x00') {
+      // Convert hex to decimal
+      valueInWei = BigInt(txData.value).toString();
+    }
+    
+    const txParams = {
+      from: userAddress,
+      to: txData.to,
+      value: valueInWei,
+      data: txData.data
+    };
+    
+    // Simulate first
+    const simulation = await simulateTransaction(txParams);
+    if (!simulation.success) {
+      throw new Error(`Transaction simulation failed: ${simulation.error}`);
+    }
+    
+    // Sign the transaction
+    const signedTx = await signTransaction(txParams, simulation);
+    
+    // Step 4: Broadcast the transaction
+    console.log('📤 Broadcasting transaction...');
+    setExecutionStatus?.('Broadcasting transaction...');
+    
+    const txHash = await broadcastTransaction(signedTx);
+    console.log('✅ Transaction broadcasted:', txHash);
+    
+    // Step 5: Monitor the transaction
+    setExecutionStatus?.('Transaction submitted. Waiting for confirmation...');
+    
+    // For manual trades, we can use standard blockchain monitoring
+    // since the transaction is a direct on-chain swap
+    try {
+      await waitForTransaction(txHash, 1);
+      console.log('✅ Manual trade confirmed on-chain');
+      setExecutionStatus?.('Trade completed successfully!');
+      
+      return {
+        transactionHash: txHash,
+        status: 'success'
+      };
+    } catch (waitError) {
+      console.warn('Transaction wait error:', waitError);
+      // Even if waiting fails, the transaction was submitted
+      // Let the background monitoring handle it
+    }
+    
+    return {
+      transactionHash: txHash,
+      status: 'pending'
+    };
+    
+  } catch (error) {
+    console.error('❌ Manual trade execution failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    setExecutionStatus?.(`Failed: ${errorMessage}`);
+    
+    return {
+      transactionHash: '',
+      status: 'failed',
+      error: errorMessage
+    };
+  }
 };
 
 /**
@@ -141,133 +338,104 @@ export const executeTrade = async (
   setExecutionStatus?: (status: string) => void
 ): Promise<TradeExecutionResult> => {
   try {
-    const { routeId, route, fromToken, toToken, userAddress, slippage, quoteResponse } = params;
+    const { routeId, route, fromToken, toToken, userAddress, slippage, quoteResponse, tradeType } = params;
     
-    // MOCK MODE: Return success without executing real transaction
-    if (false) { // TODO: Remove when ready for real trades
-      console.log('🧪 MOCK MODE: Simulating successful trade execution');
-      const mockTxHash = '0x' + Math.random().toString(16).substring(2) + Date.now().toString(16);
-      
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      return {
-        transactionHash: mockTxHash,
-        status: 'pending'
-      };
+    // Route to manual trade execution if trade type is manual
+    if (tradeType === 'manual') {
+      return await executeManualTrade(params, setExecutionStatus);
     }
     
-    // Step 1: Build the transaction via Bungee
-    console.log('🔄 Building Bungee transaction...');
-    let bungeeTransaction = await buildBungeeTransaction(
-      routeId,
-      userAddress,
-      slippage,
-      quoteResponse
-    );
     
-    // Check if signature is required
-    if ((bungeeTransaction as any).requiresSignature) {
-      console.log('📝 Signature required for transaction');
-      setExecutionStatus?.('Awaiting signature...');
+    // For ERC20 sell (Permit2 flow), we need to handle this differently
+    if (!fromToken.isNative) {
+      console.log('🔄 Following Permit2 flow for ERC20 sell...');
+      setExecutionStatus?.('Checking token approval...');
       
-      const signData = (bungeeTransaction as any).signData;
-      if (!signData || !signData.domain || !signData.types || !signData.values) {
-        throw new Error('Invalid signature data from Bungee API');
+      // Get approval data from the route
+      const approvalData = route.approvalData;
+      if (!approvalData) {
+        throw new Error('No approval data found in route');
       }
       
-      // Sign the typed data
-      const userSignature = await signTypedData(
-        signData.domain,
-        signData.types,
-        signData.values,
-        userAddress
-      );
-      
-      console.log('✅ User signature obtained');
-      setExecutionStatus?.('Building transaction...');
-      
-      // Rebuild transaction with signature
-      bungeeTransaction = await buildBungeeTransaction(
-        routeId,
-        userAddress,
-        slippage,
-        quoteResponse,
-        userSignature
-      );
-    }
-    
-    // Step 2: Check if approval is needed (for selling ERC20 tokens)
-    if (!fromToken.isNative) {
-      console.log('🔐 Checking token approval...');
+      // Step 1: Check and execute approval if needed
       const hasApproval = await checkTokenAllowance(
         fromToken.address,
         userAddress,
-        bungeeTransaction.to,
+        approvalData.spenderAddress || "0",
         params.amountWei
       );
       
       if (!hasApproval) {
-        console.log('📝 Token approval required, executing...');
+        console.log('📝 Token approval required for Permit2...');
+        setExecutionStatus?.('Approving token for Permit2...');
+        
         await executeTokenApproval({
           tokenAddress: fromToken.address,
-          spenderAddress: bungeeTransaction.to,
+          spenderAddress: approvalData.spenderAddress || "0",
           amount: params.amountWei,
           userAddress
         });
+        
+        console.log('✅ Token approved for Permit2');
       }
+      
+      // Step 2: Build the transaction to get signature data
+      console.log('🔄 Building Bungee transaction...');
+      setExecutionStatus?.('Preparing transaction...');
+      
+      let bungeeTransaction = await buildBungeeTransaction(
+        routeId,
+        userAddress,
+        slippage,
+        quoteResponse
+      );
+      
+      // Step 3: Sign the Permit2 typed data
+      if ((bungeeTransaction as any).requiresSignature) {
+        console.log('📝 Signing Permit2 data...');
+        setExecutionStatus?.('Please sign the transaction...');
+        
+        const signData = (bungeeTransaction as any).signData;
+        if (!signData || !signData.domain || !signData.types || !signData.values) {
+          throw new Error('Invalid signature data from Bungee API');
+        }
+        
+        // Sign with the correct primary type for Permit2
+        const userSignature = await signTypedData(
+          signData.domain,
+          signData.types,
+          signData.values,
+          userAddress
+        );
+        
+        console.log('✅ Permit2 signature obtained');
+        setExecutionStatus?.('Submitting transaction...');
+        
+        // Extract the witness from the signData
+        const witness = signData.values?.witness;
+        if (!witness) {
+          throw new Error('No witness data found in sign response');
+        }
+        
+        console.log('📤 Witness data extracted:', JSON.stringify(witness, null, 2));
+        console.log('📤 Submitting witness with signature...');
+        
+        // Submit the witness directly, not a custom request
+        return await submitSignedRequest(
+          route.requestType || 'SINGLE_OUTPUT_REQUEST',
+          witness,
+          userSignature,
+          routeId,
+          setExecutionStatus
+        );
+      }
+    } else {
+      // For ETH buy flow (not implemented yet)
+      throw new Error('ETH buy flow not implemented yet');
     }
     
-    // Step 3: Prepare transaction parameters
-    const txParams = {
-      from: userAddress,
-      to: bungeeTransaction.to,
-      value: bungeeTransaction.value || '0',
-      data: bungeeTransaction.data
-    };
-    
-    // Step 4: Create simulation result from Bungee data
-    const simulation: SimulationResult = {
-      assetChanges: [
-        {
-          address: userAddress,
-          tokenAddress: fromToken.isNative ? null : fromToken.address,
-          amount: `-${params.amountWei}`,
-          decimals: fromToken.decimals,
-          symbol: fromToken.symbol,
-          name: fromToken.name
-        },
-        {
-          address: userAddress,
-          tokenAddress: toToken.isNative ? null : toToken.address,
-          amount: route.outputAmountMin,
-          decimals: toToken.decimals,
-          symbol: toToken.symbol,
-          name: toToken.name
-        }
-      ],
-      gasUsed: bungeeTransaction.gasLimit,
-      gasLimit: bungeeTransaction.gasLimit,
-      maxFeePerGas: '20000000000', // Default, should be fetched
-      maxPriorityFeePerGas: '1500000000',
-      success: true,
-      warnings: []
-    };
-    
-    // Step 5: Sign the transaction
-    console.log('✍️ Signing transaction...');
-    const signedTx = await signTransaction(txParams, simulation);
-    
-    // Step 6: Broadcast the transaction
-    console.log('📡 Broadcasting transaction...');
-    const txHash = await broadcastTransaction(signedTx);
-    
-    console.log('✅ Transaction broadcasted:', txHash);
-    
-    return {
-      transactionHash: txHash,
-      status: 'pending'
-    };
+    // This should not be reached in the new flow
+    throw new Error('Invalid trade execution flow');
     
   } catch (error) {
     console.error('Trade execution failed:', error);
@@ -340,6 +508,119 @@ export const monitorTradeExecution = async (
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
+};
+
+/**
+ * Submit a signed request to Bungee
+ */
+const submitSignedRequest = async (
+  requestType: string,
+  witness: any,  // The witness object from the quote response
+  userSignature: string,
+  quoteId: string,
+  setExecutionStatus?: (status: string) => void
+): Promise<TradeExecutionResult> => {
+  try {
+    // Submit the witness directly as the request
+    const requestBody = {
+      requestType,
+      request: witness,  // Use the witness object directly
+      userSignature,
+      quoteId
+    };
+    
+    console.log('Submitting signed request with witness:', JSON.stringify(requestBody, null, 2));
+    
+    const response = await fetch(`https://public-backend.bungee.exchange/api/v1/bungee/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+    
+    const data = await response.json();
+    console.log('Submit response:', data);
+    
+    if (!data.success) {
+      throw new Error(`Submit error: ${data.error?.message || 'Unknown error'}`);
+    }
+    
+    const requestHash = data.result?.requestHash;
+    if (!requestHash) {
+      throw new Error('No request hash returned from submit');
+    }
+    
+    console.log('🔍 Request submitted successfully, hash:', requestHash);
+    
+    // Start polling for completion
+    setExecutionStatus?.('Transaction submitted, waiting for confirmation...');
+    
+    const finalStatus = await pollForCompletion(requestHash, setExecutionStatus);
+    
+    return {
+      transactionHash: finalStatus.destinationData?.txHash || requestHash,
+      status: 'success'
+    };
+    
+  } catch (error) {
+    console.error('Submit signed request failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check status of a Bungee request
+ */
+const checkBungeeRequestStatus = async (requestHash: string): Promise<any> => {
+  const response = await fetch(
+    `https://public-backend.bungee.exchange/api/v1/bungee/status?requestHash=${requestHash}`
+  );
+  const data = await response.json();
+  
+  if (!data.success) {
+    throw new Error(`Status error: ${data.error?.message || 'Unknown error'}`);
+  }
+  
+  return data.result?.[0] || data.result;
+};
+
+/**
+ * Poll for transaction completion
+ */
+const pollForCompletion = async (
+  requestHash: string,
+  setExecutionStatus?: (status: string) => void,
+  interval: number = 5000,
+  maxAttempts: number = 60
+): Promise<any> => {
+  let attempts = 0;
+  
+  while (attempts < maxAttempts) {
+    try {
+      const status = await checkBungeeRequestStatus(requestHash);
+      const code = status?.bungeeStatusCode;
+      
+      console.log(`Status check ${attempts + 1}:`, status);
+      
+      // Status codes: 0 = pending, 3 = completed, 4/5 = failed
+      if (code === 3) {
+        console.log('✅ Transaction complete:', status.destinationData?.txHash);
+        setExecutionStatus?.('Transaction completed successfully!');
+        return status;
+      } else if (code === 4 || code === 5) {
+        throw new Error(`Transaction failed with code ${code}`);
+      }
+      
+      setExecutionStatus?.(`Processing transaction... (${attempts + 1}/${maxAttempts})`);
+      
+    } catch (error) {
+      console.error('Status check error:', error);
+    }
+    
+    attempts++;
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  
+  throw new Error('Polling timed out. Transaction may not have completed.');
 };
 
 /**

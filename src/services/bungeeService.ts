@@ -126,6 +126,7 @@ const getBungeeTokenAddress = (token: VerifiedToken): string => {
  * @param userAddress - User's wallet address
  * @param slippage - Slippage tolerance (default 1%)
  * @param enableManual - Enable manual routes (default true)
+ * @param disableAuto - Disable automatic routes (default false)
  * @returns Quote response with routes
  */
 export const getBungeeQuote = async (
@@ -134,7 +135,8 @@ export const getBungeeQuote = async (
   amountWei: string,
   userAddress: string,
   slippage: number = 1,
-  enableManual: boolean = true
+  enableManual: boolean = true,
+  disableAuto: boolean = false
 ): Promise<BungeeQuoteResponse> => {
   
   try {
@@ -158,6 +160,7 @@ export const getBungeeQuote = async (
       receiverAddress: userAddress, // Same as userAddress for same-chain swaps
       outputToken: getBungeeTokenAddress(toToken),
       enableManual: enableManual,
+      disableAuto: disableAuto,
     };
 
     console.log('Bungee API request params:', JSON.stringify(params, null, 2));
@@ -379,6 +382,100 @@ export const getBestRoute = (quoteResponse: BungeeQuoteResponse): BungeeRoute =>
   return sortedRoutes[0];
 };
 
+export interface ManualBuildResult {
+  transactionData: BungeeTransactionResponse;
+  approvalData?: {
+    spenderAddress: string;
+    amount: string;
+    tokenAddress: string;
+    userAddress: string;
+  };
+}
+
+/**
+ * Build manual transaction using the build-tx endpoint
+ * @param routeId - Route ID from the manual route
+ * @returns Transaction data and approval data if needed
+ */
+export const buildManualTransaction = async (
+  routeId: string
+): Promise<ManualBuildResult> => {
+  try {
+    console.log('Building manual transaction with routeId:', routeId);
+    
+    const response = await bungeeApi.get('/api/v1/bungee-manual/build-tx', {
+      params: { routeId }
+    });
+    
+    const serverReqId = response.headers['server-req-id'];
+    
+    console.log('Manual build-tx response:', {
+      status: response.status,
+      serverReqId,
+      data: JSON.stringify(response.data, null, 2)
+    });
+    
+    if (!response.data.success) {
+      throw new Error(
+        `Build TX error: ${response.data.statusCode}: ${response.data.message}. server-req-id: ${serverReqId}`
+      );
+    }
+    
+    const result = response.data.result;
+    
+    // The transaction data is nested in result.txData
+    const txData = result.txData;
+    
+    console.log('Manual build-tx result:', {
+      hasApprovalData: !!result.approvalData,
+      userOp: result.userOp,
+      hasTxData: !!txData,
+      to: txData?.to,
+      hasData: !!txData?.data,
+      dataLength: txData?.data?.length,
+      value: txData?.value,
+      chainId: txData?.chainId
+    });
+    
+    // Validate required fields
+    if (!txData || !txData.to || !txData.data) {
+      throw new Error('Invalid transaction data from build-tx endpoint: missing txData');
+    }
+    
+    // Transform to our expected format
+    const transactionData: BungeeTransactionResponse = {
+      to: txData.to,
+      data: txData.data,
+      value: txData.value || '0x00',
+      gasLimit: txData.gasLimit || '300000',
+      chainId: txData.chainId || ETHEREUM_CHAIN_ID
+    };
+    
+    return {
+      transactionData,
+      approvalData: result.approvalData
+    };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const serverReqId = error.response?.headers['server-req-id'];
+      console.error('Manual build-tx error:', {
+        status: error.response?.status,
+        serverReqId,
+        data: error.response?.data
+      });
+      
+      if (error.response?.data?.message) {
+        throw new Error(
+          `Build TX failed: ${error.response.data.message}. server-req-id: ${serverReqId}`
+        );
+      }
+    }
+    
+    console.error('Manual transaction build error:', error);
+    throw new Error('Failed to build manual transaction: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+};
+
 /**
  * Build transaction for the selected route using Bungee submit endpoint
  * @param routeId - Route ID from quote
@@ -590,6 +687,75 @@ export const buildBungeeTransaction = async (
     console.error('Bungee transaction build error:', error);
     throw new Error('Failed to build transaction: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
+};
+
+/**
+ * Check manual transaction status
+ * @param txHash - Transaction hash to check
+ * @returns Status response
+ */
+export const checkManualTransactionStatus = async (
+  txHash: string
+): Promise<any> => {
+  try {
+    const response = await bungeeApi.get('/api/v1/bungee/status', {
+      params: { txHash }
+    });
+    
+    const serverReqId = response.headers['server-req-id'];
+    
+    if (!response.data.success) {
+      throw new Error(
+        `Status error: ${response.data.statusCode}: ${response.data.message}. server-req-id: ${serverReqId}`
+      );
+    }
+    
+    return response.data.result;
+  } catch (error) {
+    console.error('Manual status check error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Poll for manual transaction completion
+ * @param txHash - Transaction hash to monitor
+ * @param interval - Polling interval in milliseconds (default 5000)
+ * @param maxAttempts - Maximum polling attempts (default 60)
+ * @returns Final status when complete
+ */
+export const pollForManualCompletion = async (
+  txHash: string,
+  interval: number = 5000,
+  maxAttempts: number = 60
+): Promise<any> => {
+  let attempts = 0;
+  
+  while (attempts < maxAttempts) {
+    try {
+      const status = await checkManualTransactionStatus(txHash);
+      const code = status[0]?.bungeeStatusCode;
+      
+      console.log(`Manual tx status check attempt ${attempts + 1}:`, {
+        txHash,
+        code,
+        status: JSON.stringify(status, null, 2)
+      });
+      
+      if (code === 3) {
+        return status; // Transaction complete
+      }
+      
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, interval));
+    } catch (error) {
+      console.error(`Error checking status on attempt ${attempts + 1}:`, error);
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+  }
+  
+  throw new Error('Polling timed out. Transaction may not have completed.');
 };
 
 /**

@@ -21,7 +21,7 @@ import {
   BungeeQuoteResponse,
   BungeeRoute
 } from '../services/bungeeService';
-import { executeTrade, monitorTradeExecution } from '../services/tradeExecutionService';
+import { executeTrade } from '../services/tradeExecutionService';
 import { VerifiedToken } from '../config/tokens';
 import { TokenWithBalance } from '../services/tokenService';
 import { formatEther, parseEther } from 'viem';
@@ -43,7 +43,7 @@ type Props = {
 
 const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   const { walletAddress } = useWallet();
-  const { tradeMode, fromToken, toToken, amountUSD, amountWei } = route.params;
+  const { tradeMode, tradeType, fromToken, toToken, amountUSD, amountWei } = route.params;
   
   const [quote, setQuote] = useState<BungeeQuoteResponse | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<BungeeRoute | null>(null);
@@ -62,12 +62,18 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       setIsLoadingQuote(true);
       
+      // Configure parameters based on trade type
+      const enableManual = tradeType === 'manual';
+      const disableAuto = tradeType === 'manual';
+      
       const quoteResponse = await getBungeeQuote(
         fromToken,
         toToken,
         amountWei,
         walletAddress,
-        1 // 1% slippage
+        1, // 1% slippage
+        enableManual,
+        disableAuto
       );
       
       setQuote(quoteResponse);
@@ -104,7 +110,8 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
         amountWei,
         userAddress: walletAddress,
         slippage: 1,
-        quoteResponse: quote
+        quoteResponse: quote,
+        tradeType: tradeType
       }, setExecutionStatus);
       
       if (result.status === 'failed') {
@@ -112,9 +119,11 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       
       // Start background monitoring
+      // For manual trades, monitor as a regular transaction, not a trade
+      const monitorType = tradeType === 'manual' ? 'send' : 'trade';
       await startMonitoring({
         hash: result.transactionHash,
-        type: 'trade',
+        type: monitorType as 'send' | 'trade',
         fromAddress: walletAddress,
         amount: parseFloat(formatEther(BigInt(amountWei))).toFixed(6),
         tokenSymbol: `${fromToken.symbol} → ${toToken.symbol}`,

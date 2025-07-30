@@ -12,6 +12,7 @@ export type RootStackParamList = {
     SupabaseTest: undefined;
     TradeReview: {
       tradeMode: 'buy' | 'sell';
+      tradeType: 'manual' | 'auto';
       fromToken: TokenWithBalance;
       toToken: TokenWithBalance;
       amountUSD: string;

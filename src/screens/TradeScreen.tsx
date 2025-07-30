@@ -39,12 +39,14 @@ type Props = {
 };
 
 type TradeMode = 'buy' | 'sell';
+type TradeType = 'manual' | 'auto';
 
 const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress } = useWallet();
   
   // State
   const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
+  const [tradeType, setTradeType] = useState<TradeType>('manual');
   const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
   const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(true);
@@ -199,17 +201,38 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const handleReviewTrade = () => {
     if (!selectedToken || !amountUSD) return;
     
-    // Calculate amount in wei
+    // Calculate amount in wei/smallest unit
     let amountWei: string;
     const usdAmount = parseFloat(amountUSD);
     
     if (tradeMode === 'buy') {
       // For buying, we need to calculate ETH amount from USD
-      amountWei = parseEther((usdAmount / ethPrice).toString()).toString();
+      const ethAmount = usdAmount / ethPrice;
+      amountWei = parseEther(ethAmount.toString()).toString();
     } else {
-      // For selling, convert token amount to smallest unit
-      const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
-      amountWei = parseUnits(tokenAmount.toString(), selectedToken.decimals).toString();
+      // For selling, we need to handle the conversion more carefully
+      if (selectedToken.isNative) {
+        // For ETH, convert USD to ETH amount
+        const ethAmount = usdAmount / ethPrice;
+        amountWei = parseEther(ethAmount.toString()).toString();
+      } else {
+        // For tokens, convert USD to token amount
+        const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
+        // Ensure we have enough precision for the conversion
+        const tokenAmountString = tokenAmount.toFixed(selectedToken.decimals);
+        amountWei = parseUnits(tokenAmountString, selectedToken.decimals).toString();
+        
+        // Debug logging
+        console.log('Token conversion:', {
+          token: selectedToken.symbol,
+          usdAmount,
+          tokenPrice: selectedToken.usdPrice,
+          tokenAmount,
+          tokenAmountString,
+          decimals: selectedToken.decimals,
+          amountWei
+        });
+      }
     }
     
     // Get the tokens for the trade
@@ -222,6 +245,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     // Navigate to review screen
     navigation.navigate('TradeReview', {
       tradeMode,
+      tradeType,
       fromToken,
       toToken,
       amountUSD,
@@ -303,6 +327,26 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <Text style={[styles.tradeModeText, tradeMode === 'sell' && styles.tradeModeTextActive]}>
                 Sell
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Trade Type Toggle */}
+          <View style={styles.tradeTypeContainer}>
+            <TouchableOpacity
+              style={[styles.tradeTypeButton, tradeType === 'manual' && styles.tradeTypeButtonActive]}
+              onPress={() => setTradeType('manual')}
+            >
+              <Text style={[styles.tradeTypeText, tradeType === 'manual' && styles.tradeTypeTextActive]}>
+                Manual
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tradeTypeButton, tradeType === 'auto' && styles.tradeTypeButtonActive]}
+              onPress={() => setTradeType('auto')}
+            >
+              <Text style={[styles.tradeTypeText, tradeType === 'auto' && styles.tradeTypeTextActive]}>
+                Auto
               </Text>
             </TouchableOpacity>
           </View>
@@ -513,6 +557,31 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
   },
   tradeModeTextActive: {
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  tradeTypeContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 4,
+    marginBottom: theme.spacing.xl,
+  },
+  tradeTypeButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
+  },
+  tradeTypeButtonActive: {
+    backgroundColor: theme.colors.background,
+    ...theme.shadows.sm,
+  },
+  tradeTypeText: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+  },
+  tradeTypeTextActive: {
     color: theme.colors.text.primary,
     fontWeight: '600',
   },

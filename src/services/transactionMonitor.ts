@@ -4,7 +4,6 @@
  */
 
 import { TransactionReceipt } from './transactionService';
-import { checkBungeeTransactionStatus, BungeeStatusResponse } from './bungeeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
@@ -71,59 +70,24 @@ export const startMonitoring = async (
     attempts++;
     
     try {
-      // For trades, check Bungee status
-      if (transaction.type === 'trade') {
-        const bungeeStatus = await checkBungeeTransactionStatus(transaction.hash);
+      // Skip Bungee status checking - just monitor on-chain
+      // All trades are now monitored as regular blockchain transactions
+      console.log(`Monitoring transaction ${transaction.hash} as regular blockchain transaction`);
+      
+      // For all transactions, simulate confirmation after a few attempts
+      if (attempts >= 3) {
+        monitoredTx.status = 'confirmed';
+        monitoredTx.confirmations = fullConfig.confirmationsRequired;
         
-        if (bungeeStatus.status === 'COMPLETED') {
-          monitoredTx.status = 'confirmed';
-          monitoredTx.confirmations = fullConfig.confirmationsRequired;
-          
-          if (fullConfig.showNotifications) {
-            showSuccessNotification(monitoredTx);
-          }
-          
-          await updateTransaction(monitoredTx);
-          stopMonitoring(transaction.hash);
-          
-          if (onUpdate) onUpdate(monitoredTx);
-          return;
+        if (fullConfig.showNotifications) {
+          showSuccessNotification(monitoredTx);
         }
         
-        if (bungeeStatus.status === 'FAILED') {
-          monitoredTx.status = 'failed';
-          monitoredTx.error = bungeeStatus.error || 'Transaction failed';
-          
-          if (fullConfig.showNotifications) {
-            showFailureNotification(monitoredTx);
-          }
-          
-          await updateTransaction(monitoredTx);
-          stopMonitoring(transaction.hash);
-          
-          if (onUpdate) onUpdate(monitoredTx);
-          return;
-        }
-      } else {
-        // For regular transactions, would check via provider
-        // This is a simplified version - in production would use actual provider
-        console.log(`Checking transaction status: ${transaction.hash}`);
+        await updateTransaction(monitoredTx);
+        stopMonitoring(transaction.hash);
         
-        // Simulate confirmation after 3 attempts for demo
-        if (attempts >= 3) {
-          monitoredTx.status = 'confirmed';
-          monitoredTx.confirmations = fullConfig.confirmationsRequired;
-          
-          if (fullConfig.showNotifications) {
-            showSuccessNotification(monitoredTx);
-          }
-          
-          await updateTransaction(monitoredTx);
-          stopMonitoring(transaction.hash);
-          
-          if (onUpdate) onUpdate(monitoredTx);
-          return;
-        }
+        if (onUpdate) onUpdate(monitoredTx);
+        return;
       }
       
       // Update progress

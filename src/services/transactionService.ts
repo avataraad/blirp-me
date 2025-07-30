@@ -358,9 +358,29 @@ export const formatAssetChange = (change: AssetChange): {
  */
 const getPrivateKeyFromSecureStorage = async (params: TransactionParams): Promise<string> => {
   try {
+    // First, try to check if credentials exist without biometric prompt
+    console.log('Checking for wallet credentials...');
+    
     // Format transaction details for the authentication prompt
-    const amountEth = formatEther(BigInt(params.value));
-    const recipientDisplay = params.to.slice(0, 6) + '...' + params.to.slice(-4);
+    let promptDescription: string;
+    
+    console.log('Transaction params for keychain:', {
+      from: params.from,
+      to: params.to,
+      value: params.value,
+      hasData: !!params.data,
+      dataLength: params.data?.length
+    });
+    
+    // Check if this is an approval transaction (value is 0 and has data)
+    if (params.value === '0' && params.data && params.data.startsWith('0x095ea7b3')) {
+      const tokenDisplay = params.to ? (params.to.slice(0, 6) + '...' + params.to.slice(-4)) : 'Unknown';
+      promptDescription = `Approve token spending for ${tokenDisplay}`;
+    } else {
+      const amountEth = formatEther(BigInt(params.value || '0'));
+      const recipientDisplay = params.to ? (params.to.slice(0, 6) + '...' + params.to.slice(-4)) : 'Unknown';
+      promptDescription = `Sending ${amountEth} ETH to ${recipientDisplay}`;
+    }
     
     const credentials = await Keychain.getInternetCredentials(
       'blirpme_wallet',
@@ -368,17 +388,29 @@ const getPrivateKeyFromSecureStorage = async (params: TransactionParams): Promis
         authenticationPrompt: {
           title: 'Confirm Transaction',
           subtitle: 'Authenticate to sign transaction',
-          description: `Sending ${amountEth} ETH to ${recipientDisplay}`,
+          description: promptDescription,
           cancel: 'Cancel'
         }
       }
     );
     
+    console.log('Keychain credentials retrieved:', {
+      hasCredentials: !!credentials,
+      hasPassword: !!(credentials && credentials.password),
+      passwordLength: credentials?.password?.length || 0
+    });
+    
     if (!credentials || !credentials.password) {
       throw new Error('No wallet found in secure storage');
     }
     
-    return credentials.password; // The private key is stored as the password
+    // Ensure the private key is properly formatted
+    let privateKey = credentials.password;
+    if (!privateKey.startsWith('0x')) {
+      privateKey = '0x' + privateKey;
+    }
+    
+    return privateKey;
   } catch (error) {
     console.error('Failed to retrieve private key:', error);
     if (error.message?.includes('UserCancel')) {
@@ -415,12 +447,37 @@ export const signTransaction = async (
   try {
     // Get the private key from secure storage with biometric auth
     const privateKey = await getPrivateKeyFromSecureStorage(params);
+    
+    if (!privateKey) {
+      throw new Error('Failed to retrieve private key from secure storage');
+    }
+    
+    console.log('Private key format check:', {
+      hasPrivateKey: !!privateKey,
+      startsWithHex: privateKey.startsWith('0x'),
+      length: privateKey.length
+    });
+    
     const account = privateKeyToAccount(privateKey as `0x${string}`);
+    
+    console.log('Transaction signing details:', {
+      fromParam: params.from,
+      derivedAddress: account.address,
+      toAddress: params.to,
+      hasData: !!params.data,
+      dataPreview: params.data?.slice(0, 10)
+    });
+    
+    // Verify the account address matches the expected from address
+    if (account.address.toLowerCase() !== params.from.toLowerCase()) {
+      throw new Error(`Account mismatch: derived ${account.address}, expected ${params.from}`);
+    }
     
     // Get current nonce
     const nonce = await getCurrentNonce(params.from);
     
     // Build transaction object
+    // Note: Do NOT include 'from' field when using account.signTransaction()
     let transaction: any = {
       to: params.to as `0x${string}`,
       value: BigInt(params.value),
@@ -432,7 +489,12 @@ export const signTransaction = async (
       chainId: 1 // Ethereum mainnet
     };
     
-    // Handle ERC-20 token transfers
+    // Include data field if provided
+    if (params.data) {
+      transaction.data = params.data as `0x${string}`;
+    }
+    
+    // Handle ERC-20 token transfers (override data if needed)
     if (params.tokenAddress && params.tokenAmount) {
       transaction.to = params.tokenAddress as `0x${string}`;
       transaction.value = BigInt(0);
@@ -542,8 +604,18 @@ export const signTypedData = async (
       transport: http()
     });
     
-    // Find the primary type (the one that's not 'EIP712Domain')
-    const primaryType = Object.keys(types).find(type => type !== 'EIP712Domain') || Object.keys(types)[0];
+    // For Permit2, the primary type is typically 'PermitWitnessTransferFrom'
+    let primaryType = Object.keys(types).find(type => 
+      type === 'PermitWitnessTransferFrom' || 
+      type === 'PermitTransferFrom'
+    );
+    
+    // Fallback to finding any non-EIP712Domain type
+    if (!primaryType) {
+      primaryType = Object.keys(types).find(type => type !== 'EIP712Domain') || Object.keys(types)[0];
+    }
+    
+    console.log('Signing typed data with primary type:', primaryType);
     
     // Sign the typed data
     const signature = await walletClient.signTypedData({
