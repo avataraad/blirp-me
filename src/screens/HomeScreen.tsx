@@ -20,6 +20,7 @@ import {
   formatTokenBalance,
   WalletBalanceResponse,
 } from '../services/balance';
+import { getTokenBySymbol } from '../config/tokens';
 
 type HomeScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -72,15 +73,27 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     logout();
   };
 
-  // Asset mapping with custom names from Issue #38
+  // Asset mapping with custom names using verified token list
   const getAssetsBySection = () => {
-    if (!balanceData?.tokens) return { cash: [], assets: [], earn: [] };
+    if (!balanceData?.tokens) {
+      return { cash: [], assets: [], earn: [] };
+    }
 
+    // Define categories based on our supported tokens
     const cash = balanceData.tokens.filter(token => token.symbol === 'USDC');
     const assets = balanceData.tokens.filter(token => 
-      token.symbol === 'ETH' || token.symbol === 'cbBTC'
+      ['ETH', 'cbBTC', 'wXRP'].includes(token.symbol)
     );
-    const earn = balanceData.tokens.filter(token => token.symbol === 'cbETH');
+    const earn = balanceData.tokens.filter(token => 
+      ['stETH'].includes(token.symbol) // Only stETH is in our verified list for earning
+    );
+
+    console.log('🏠 HomeScreen: Token sections:', {
+      cash: cash.length,
+      assets: assets.length,
+      earn: earn.length,
+      totalTokens: balanceData.tokens.length
+    });
 
     return { cash, assets, earn };
   };
@@ -94,7 +107,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       case 'USDC': return 'Digital USD';
       case 'ETH': return 'Ethereum';
       case 'cbBTC': return 'Bitcoin';
-      case 'cbETH': return 'Ethereum'; // In Earn section
+      case 'wXRP': return 'Ripple';
+      case 'stETH': return 'Ethereum'; // In Earn section
       default: return symbol;
     }
   };

@@ -3,6 +3,7 @@ import Config from 'react-native-config';
 import { getBalance } from '@wagmi/core';
 import { formatEther } from 'viem';
 import { config } from '../config/wagmi';
+import { ETHEREUM_MAINNET_TOKENS, getTokenByAddress, getTokenBySymbol } from '../config/tokens';
 
 // Moralis API configuration
 const MORALIS_API_KEY = Config.MORALIS_API_KEY;
@@ -95,15 +96,60 @@ export const getWalletBalances = async (
         : 0,
     }));
 
+    // Filter to only include tokens from our verified list
+    const verifiedTokens = tokensWithPercentage.filter(token => {
+      // For native ETH, check if it's ETH (Moralis uses different representations)
+      if (token.symbol === 'ETH' && (
+        token.token_address === null || 
+        token.token_address === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ||
+        token.native_token === true
+      )) {
+        return true;
+      }
+      // For ERC20 tokens, check if the address matches our verified list
+      if (token.token_address && token.token_address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+        const verifiedToken = getTokenByAddress(token.token_address);
+        return !!verifiedToken;
+      }
+      return false;
+    });
+
     // Sort by USD value (highest first)
-    tokensWithPercentage.sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
+    verifiedTokens.sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
+
+    // Recalculate total USD value for verified tokens only
+    const verifiedTotalUsdValue = verifiedTokens.reduce((sum, token) => {
+      return sum + (token.usd_value || 0);
+    }, 0);
+
+    // Update portfolio percentages based on verified tokens only
+    const verifiedTokensWithPercentage = verifiedTokens.map(token => ({
+      ...token,
+      portfolio_percentage: verifiedTotalUsdValue > 0 
+        ? ((token.usd_value || 0) / verifiedTotalUsdValue) * 100 
+        : 0,
+    }));
+
+    console.log('🔍 All tokens from Moralis:', tokensWithPercentage.map(t => ({
+      symbol: t.symbol,
+      token_address: t.token_address,
+      native_token: t.native_token,
+      balance_formatted: t.balance_formatted,
+      usd_value: t.usd_value
+    })));
+    
+    console.log('💰 Verified tokens found:', verifiedTokensWithPercentage.map(t => ({
+      symbol: t.symbol,
+      usd_value: t.usd_value,
+      balance_formatted: t.balance_formatted
+    })));
 
     return {
-      tokens: tokensWithPercentage,
+      tokens: verifiedTokensWithPercentage,
       cursor: null, // We've fetched all pages
-      total_usd_value: totalUsdValue,
-      total_tokens_count: tokensWithPercentage.length,
-      total_positions_count: tokensWithPercentage.filter(t => 
+      total_usd_value: verifiedTotalUsdValue,
+      total_tokens_count: verifiedTokensWithPercentage.length,
+      total_positions_count: verifiedTokensWithPercentage.filter(t => 
         parseFloat(t.balance_formatted) > 0
       ).length,
     };
