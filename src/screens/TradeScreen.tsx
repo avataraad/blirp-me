@@ -277,7 +277,10 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const [executionStatus, setExecutionStatus] = useState<string>('');
 
   const handleExecuteTrade = async () => {
-    if (!selectedToken || !amountUSD) return;
+    if (!selectedToken || !amountUSD || !walletAddress) {
+      console.error('Missing required data:', { selectedToken, amountUSD, walletAddress });
+      return;
+    }
     
     // Calculate amount in wei/smallest unit
     let amountWei: string;
@@ -324,6 +327,22 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     
     const fromToken = tradeMode === 'buy' ? ethToken : selectedToken;
     const toToken = tradeMode === 'buy' ? selectedToken : ethToken;
+    
+    // Validate amountWei
+    if (!amountWei || amountWei === '0' || isNaN(Number(amountWei))) {
+      console.error('Invalid amountWei:', amountWei);
+      Alert.alert('Invalid Amount', 'Please enter a valid amount');
+      return;
+    }
+    
+    console.log('Trade parameters:', {
+      fromToken: fromToken.symbol,
+      toToken: toToken.symbol,
+      amountWei,
+      amountUSD,
+      walletAddress,
+      tradeMode
+    });
     
     try {
       setIsGettingQuote(true);
