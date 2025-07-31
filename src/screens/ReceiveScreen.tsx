@@ -56,7 +56,9 @@ const ReceiveScreen: React.FC<Props> = () => {
 
   // Use real wallet data from context with defensive checks
   const address = walletAddress || '';
-  const tag = walletTag?.trim() || '';
+  // Clean the tag by removing " Wallet Backup" suffix if present
+  const rawTag = walletTag?.trim() || '';
+  const tag = rawTag.replace(/ Wallet Backup$/, '');
   const tagWithAt = tag ? `@${tag}` : '';
 
   // Always display tag (or message if no tag)
@@ -82,9 +84,9 @@ const ReceiveScreen: React.FC<Props> = () => {
     setTimeout(() => setCopyButtonPressed(false), 150);
     
     try {
-      await Clipboard.setString(tagWithAt);
+      await Clipboard.setString(tag);
       HapticFeedback.impact();
-      showToast(`✓ Copied ${tagWithAt}`);
+      showToast(`✓ Copied ${tag}`);
     } catch (error) {
       HapticFeedback.notificationError();
       showToast('Failed to copy to clipboard', 'error');
