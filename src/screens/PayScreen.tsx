@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -56,7 +56,10 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   // Real blockchain data
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
-  const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(1);
+  // Initialize currentChainId based on enabledChains
+  const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(
+    enabledChains.length > 0 ? enabledChains[0] : 1
+  );
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
   // Try to get wallet address from either direct property or wallet object
   const walletAddress = contextWalletAddress || wallet?.address || '';
@@ -73,16 +76,34 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     if (enabledChains.length > 0) {
       // Use the first enabled chain as the current chain
-      setCurrentChainId(enabledChains[0]);
+      const newChainId = enabledChains[0];
+      if (newChainId !== currentChainId) {
+        console.log('PayScreen: Changing chain from', currentChainId, 'to', newChainId);
+        setCurrentChainId(newChainId);
+      }
     } else {
       // Default to Ethereum mainnet if no chains are enabled
-      setCurrentChainId(1);
+      if (currentChainId !== 1) {
+        console.log('PayScreen: No chains enabled, defaulting to mainnet');
+        setCurrentChainId(1);
+      }
     }
-  }, [enabledChains]);
+  }, [enabledChains, currentChainId]);
 
+  // Add ref to track if we're currently loading
+  const loadingRef = useRef(false);
+  
   // Load wallet data on component mount
   useEffect(() => {
     const loadWalletData = async () => {
+      // Prevent multiple simultaneous loads
+      if (loadingRef.current) {
+        console.log('PayScreen: Skipping balance load - already loading');
+        return;
+      }
+      
+      loadingRef.current = true;
+      
       try {
         console.log('PayScreen: Loading wallet data...', {
           walletAddress,
@@ -96,10 +117,11 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           // No wallet address available
           console.error('PayScreen: No wallet address available');
           // Don't show alert on initial load, just log
+          loadingRef.current = false;
           return;
         }
         
-        console.log('PayScreen: Fetching balance for address:', walletAddress);
+        console.log('PayScreen: Fetching balance for address:', walletAddress, 'on chain:', currentChainId);
         
         // Get balance from the current chain
         const balanceResult = await getBalance(config, {
@@ -117,13 +139,18 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         const priceResult = await getEthPrice();
         console.log('PayScreen: ETH price:', priceResult);
         
-        setBalance(parseFloat(formatEther(balanceResult.value)));
+        const balanceInEth = parseFloat(formatEther(balanceResult.value));
+        console.log('PayScreen: Setting balance to:', balanceInEth, 'ETH');
+        
+        setBalance(balanceInEth);
         setEthPrice(priceResult);
         setIsLoadingBalance(false);
       } catch (error) {
         console.error('PayScreen: Failed to load wallet data:', error);
         setIsLoadingBalance(false);
         // Don't show alert for balance loading errors, just log
+      } finally {
+        loadingRef.current = false;
       }
     };
 
@@ -133,7 +160,6 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     } else {
       setIsLoadingBalance(false);
     }
-    // Tags are now managed through the database
   }, [walletAddress, contextWalletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
