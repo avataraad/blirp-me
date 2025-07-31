@@ -18,6 +18,7 @@ export interface ApprovalData {
   userAddress: Address;
   spenderAddress: Address;
   amount: bigint;
+  chainId?: number;
 }
 
 export interface ApprovalTransaction {
@@ -36,7 +37,7 @@ export const checkAllowance = async (
   approvalData: ApprovalData
 ): Promise<bigint> => {
   try {
-    const publicClient = getPublicClient(config);
+    const publicClient = getPublicClient(config, { chainId: approvalData.chainId || 1 });
     if (!publicClient) {
       throw new Error('Public client not available');
     }
@@ -76,7 +77,7 @@ export const buildApprovalTransaction = async (
 ): Promise<ApprovalTransaction | null> => {
   try {
     // Check current allowance
-    const currentAllowance = await checkAllowance(approvalData);
+    const currentAllowance = await checkAllowance({ ...approvalData, chainId });
     
     // If allowance is sufficient, no approval needed
     if (currentAllowance >= approvalData.amount) {
@@ -124,20 +125,23 @@ export const needsApproval = async (
   tokenAddress: Address,
   ownerAddress: Address,
   spenderAddress: Address,
-  amount: bigint
+  amount: bigint,
+  chainId?: number
 ): Promise<boolean> => {
   try {
     console.log('needsApproval called with:', {
       tokenAddress,
       ownerAddress,
       spenderAddress,
-      amount: amount.toString()
+      amount: amount.toString(),
+      chainId
     });
     const currentAllowance = await checkAllowance({
       tokenAddress,
       userAddress: ownerAddress,
       spenderAddress,
-      amount
+      amount,
+      chainId
     });
     
     const needsApproval = currentAllowance < amount;

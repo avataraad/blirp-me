@@ -3,7 +3,8 @@ import { encodeFunctionData, formatEther, formatGwei, parseGwei, parseTransactio
 import { estimateFeesPerGas, getTransactionCount, waitForTransactionReceipt, getPublicClient } from '@wagmi/core';
 import { privateKeyToAccount } from 'viem/accounts';
 import { config } from '../config/wagmi';
-import { mainnet } from '@wagmi/core/chains';
+import { mainnet, base } from '@wagmi/core/chains';
+import { SupportedChainId } from '../config/chains';
 import { TypedDataDomain, TypedDataField } from 'viem';
 import * as Keychain from 'react-native-keychain';
 
@@ -46,6 +47,7 @@ export interface TransactionParams {
   data?: string; // For contract interactions
   tokenAddress?: string; // For ERC-20 transfers
   tokenAmount?: string; // For ERC-20 transfers
+  chainId?: SupportedChainId; // Support for multiple chains
 }
 
 export interface SignedTransaction {
@@ -75,13 +77,13 @@ export interface TransactionReceipt {
 /**
  * Get current gas prices using viem
  */
-export const getCurrentGasPrices = async (): Promise<{
+export const getCurrentGasPrices = async (chainId?: SupportedChainId): Promise<{
   maxFeePerGas: string;
   maxPriorityFeePerGas: string;
   gasPrice: string;
 }> => {
   try {
-    const publicClient = getPublicClient(config, { chainId: 1 });
+    const publicClient = getPublicClient(config, { chainId: chainId || 1 });
     if (!publicClient) {
       throw new Error('Failed to get public client');
     }
@@ -150,9 +152,10 @@ export const estimateTransactionGas = async (params: {
   to: string;
   value?: string;
   data?: string;
+  chainId?: SupportedChainId;
 }): Promise<string> => {
   try {
-    const publicClient = getPublicClient(config, { chainId: 1 });
+    const publicClient = getPublicClient(config, { chainId: params.chainId || 1 });
     if (!publicClient) {
       throw new Error('Failed to get public client');
     }
@@ -180,7 +183,7 @@ export const estimateTransactionGas = async (params: {
 export const simulateTransaction = async (params: TransactionParams): Promise<SimulationResult> => {
   try {
     // Get current gas prices
-    const gasPrices = await getCurrentGasPrices();
+    const gasPrices = await getCurrentGasPrices(params.chainId);
     
     // Estimate gas using Alchemy's eth_estimateGas
     let gasLimit: string;
@@ -190,7 +193,8 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
         from: params.from,
         to: params.to,
         value: params.value,
-        data: params.data
+        data: params.data,
+        chainId: params.chainId
       });
     } else if (params.tokenAddress) {
       // For token transfers, build the data and estimate
@@ -199,7 +203,8 @@ export const simulateTransaction = async (params: TransactionParams): Promise<Si
         from: params.from,
         to: params.tokenAddress,
         value: '0',
-        data: transferData
+        data: transferData,
+        chainId: params.chainId
       });
     } else {
       // For ETH transfers, use standard gas limit
@@ -423,11 +428,12 @@ const getPrivateKeyFromSecureStorage = async (params: TransactionParams): Promis
 /**
  * Get the current nonce for an address
  */
-const getCurrentNonce = async (address: string): Promise<number> => {
+const getCurrentNonce = async (address: string, chainId?: SupportedChainId): Promise<number> => {
   try {
     const nonce = await getTransactionCount(config, {
       address: address as `0x${string}`,
-      blockTag: 'pending' // Include pending transactions
+      blockTag: 'pending', // Include pending transactions
+      chainId: chainId || 1
     });
     
     return Number(nonce);
@@ -474,7 +480,7 @@ export const signTransaction = async (
     }
     
     // Get current nonce
-    const nonce = await getCurrentNonce(params.from);
+    const nonce = await getCurrentNonce(params.from, params.chainId);
     
     // Build transaction object
     // Note: Do NOT include 'from' field when using account.signTransaction()
@@ -486,7 +492,7 @@ export const signTransaction = async (
       maxFeePerGas: BigInt(simulationResult.maxFeePerGas),
       maxPriorityFeePerGas: BigInt(simulationResult.maxPriorityFeePerGas),
       type: 'eip1559' as const,
-      chainId: 1 // Ethereum mainnet
+      chainId: params.chainId || 1 // Default to Ethereum mainnet
     };
     
     // Include data field if provided
@@ -526,11 +532,12 @@ export const signTransaction = async (
  * Broadcast a signed transaction to the network
  */
 export const broadcastTransaction = async (
-  signedTransaction: SignedTransaction
+  signedTransaction: SignedTransaction,
+  chainId?: SupportedChainId
 ): Promise<string> => {
   try {
     // Get the public client from wagmi config
-    const publicClient = getPublicClient(config, { chainId: mainnet.id });
+    const publicClient = getPublicClient(config, { chainId: chainId || mainnet.id });
     
     if (!publicClient) {
       throw new Error('Public client not available');
@@ -573,12 +580,14 @@ export const broadcastTransaction = async (
  */
 export const waitForTransaction = async (
   transactionHash: string,
-  confirmations: number = 1
+  confirmations: number = 1,
+  chainId?: SupportedChainId
 ): Promise<TransactionReceipt> => {
   try {
     const receipt = await waitForTransactionReceipt(config, {
       hash: transactionHash as `0x${string}`,
-      confirmations
+      confirmations,
+      chainId: chainId || 1
     });
     
     return {
@@ -605,7 +614,8 @@ export const signTypedData = async (
   domain: TypedDataDomain,
   types: Record<string, TypedDataField[]>,
   values: Record<string, any>,
-  userAddress: string
+  userAddress: string,
+  chainId?: SupportedChainId
 ): Promise<string> => {
   try {
     // Get the private key from secure storage with biometric auth
@@ -620,7 +630,7 @@ export const signTypedData = async (
     // Create a wallet client for signing
     const walletClient = createWalletClient({
       account,
-      chain: mainnet,
+      chain: chainId === 8453 ? base : mainnet,
       transport: http()
     });
     

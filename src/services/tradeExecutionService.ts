@@ -57,6 +57,7 @@ export interface ApprovalParams {
   spenderAddress: string;
   amount: string;
   userAddress: string;
+  chainId?: number;
 }
 
 // ERC20 approval ABI
@@ -99,7 +100,8 @@ export const executeTokenApproval = async (
       from: userAddress,
       to: tokenAddress,
       value: '0',
-      data: approvalData
+      data: approvalData,
+      chainId: params.chainId
     };
     
     // Properly simulate the transaction to get accurate gas estimates
@@ -115,10 +117,10 @@ export const executeTokenApproval = async (
     const signedTx = await signTransaction(txParams, simulation);
     
     // Broadcast the transaction
-    const txHash = await broadcastTransaction(signedTx);
+    const txHash = await broadcastTransaction(signedTx, params.chainId);
     
     // Wait for confirmation
-    await waitForTransaction(txHash, 1);
+    await waitForTransaction(txHash, 1, params.chainId);
     
     return txHash;
   } catch (error) {
@@ -139,10 +141,11 @@ export const checkTokenAllowance = async (
   tokenAddress: string,
   ownerAddress: string,
   spenderAddress: string,
-  amount: string
+  amount: string,
+  chainId?: number
 ): Promise<boolean> => {
   try {
-    const publicClient = getPublicClient(config, { chainId: 1 });
+    const publicClient = getPublicClient(config, { chainId: chainId || 1 });
     if (!publicClient) {
       throw new Error('Failed to get public client');
     }
@@ -223,11 +226,12 @@ export const executeManualTrade = async (
         buildResult.approvalData.tokenAddress as `0x${string}`,
         userAddress as `0x${string}`,
         buildResult.approvalData.spenderAddress as `0x${string}`,
-        BigInt(buildResult.approvalData.amount)
+        BigInt(buildResult.approvalData.amount),
+        params.fromToken.chainId
       );
       
       // Check ETH balance for gas
-      const publicClient = getPublicClient(config, { chainId: 1 });
+      const publicClient = getPublicClient(config, { chainId: params.fromToken.chainId || 1 });
       if (publicClient) {
         try {
           // Check ETH balance first
@@ -274,11 +278,12 @@ export const executeManualTrade = async (
         console.log('📝 Executing token approval...');
         setExecutionStatus?.('Approving token...');
         
-        const approvalTx = await buildApprovalTransaction(1, {
+        const approvalTx = await buildApprovalTransaction(params.fromToken.chainId || 1, {
           tokenAddress: buildResult.approvalData.tokenAddress as `0x${string}`,
           userAddress: userAddress as `0x${string}`,
           spenderAddress: buildResult.approvalData.spenderAddress as `0x${string}`,
-          amount: BigInt(buildResult.approvalData.amount)
+          amount: BigInt(buildResult.approvalData.amount),
+          chainId: params.fromToken.chainId
         });
         
         if (approvalTx) {
@@ -287,7 +292,8 @@ export const executeManualTrade = async (
             from: userAddress,
             to: approvalTx.to,
             value: '0',
-            data: approvalTx.data
+            data: approvalTx.data,
+            chainId: params.fromToken.chainId
           };
           
           const simulation = await simulateTransaction(approvalParams);
@@ -296,11 +302,11 @@ export const executeManualTrade = async (
           }
           
           const signedApproval = await signTransaction(approvalParams, simulation);
-          const approvalHash = await broadcastTransaction(signedApproval);
+          const approvalHash = await broadcastTransaction(signedApproval, params.fromToken.chainId);
           
           console.log('⏳ Waiting for approval confirmation...');
           setExecutionStatus?.('Waiting for approval confirmation...');
-          await waitForTransaction(approvalHash, 1);
+          await waitForTransaction(approvalHash, 1, params.fromToken.chainId);
           
           console.log('✅ Token approved');
         }
@@ -333,7 +339,8 @@ export const executeManualTrade = async (
       from: userAddress,
       to: txData.to,
       value: valueInWei,
-      data: txData.data
+      data: txData.data,
+      chainId: params.fromToken.chainId
     };
     
     // Simulate first, but use Bungee's recommended gas limit if simulation fails
@@ -341,7 +348,7 @@ export const executeManualTrade = async (
     if (!simulation.success) {
       console.log('Simulation failed, using Bungee-recommended gas limit:', txData.gasLimit);
       // Create a fallback simulation result using Bungee's gas estimates
-      const gasPrices = await getCurrentGasPrices();
+      const gasPrices = await getCurrentGasPrices(params.fromToken.chainId);
       const fallbackSimulation = {
         assetChanges: [],
         gasUsed: txData.gasLimit || '300000',
@@ -357,7 +364,7 @@ export const executeManualTrade = async (
       };
       
       const signedTx = await signTransaction(txParams, fallbackSimulation);
-      const txHash = await broadcastTransaction(signedTx);
+      const txHash = await broadcastTransaction(signedTx, params.fromToken.chainId);
       console.log('✅ Transaction broadcasted:', txHash);
       
       return {
@@ -373,7 +380,7 @@ export const executeManualTrade = async (
     console.log('📤 Broadcasting transaction...');
     setExecutionStatus?.('Broadcasting transaction...');
     
-    const txHash = await broadcastTransaction(signedTx);
+    const txHash = await broadcastTransaction(signedTx, params.fromToken.chainId);
     console.log('✅ Transaction broadcasted:', txHash);
     
     // Step 5: Monitor the transaction
@@ -382,7 +389,7 @@ export const executeManualTrade = async (
     // For manual trades, we can use standard blockchain monitoring
     // since the transaction is a direct on-chain swap
     try {
-      await waitForTransaction(txHash, 1);
+      await waitForTransaction(txHash, 1, params.fromToken.chainId);
       console.log('✅ Manual trade confirmed on-chain');
       setExecutionStatus?.('Trade completed successfully!');
       
@@ -448,7 +455,8 @@ export const executeTrade = async (
         fromToken.address,
         userAddress,
         approvalData.spenderAddress || "0",
-        params.amountWei
+        params.amountWei,
+        fromToken.chainId
       );
       
       if (!hasApproval) {
@@ -459,7 +467,8 @@ export const executeTrade = async (
           tokenAddress: fromToken.address,
           spenderAddress: approvalData.spenderAddress || "0",
           amount: params.amountWei,
-          userAddress
+          userAddress,
+          chainId: fromToken.chainId
         });
         
         console.log('✅ Token approved for Permit2');
@@ -541,7 +550,8 @@ export const executeTrade = async (
  */
 export const monitorTradeExecution = async (
   transactionHash: string,
-  onStatusUpdate?: (status: string) => void
+  onStatusUpdate?: (status: string) => void,
+  chainId?: number
 ): Promise<TradeExecutionResult> => {
   try {
     let attempts = 0;
@@ -549,7 +559,7 @@ export const monitorTradeExecution = async (
     
     while (attempts < maxAttempts) {
       // Check Bungee status
-      const bungeeStatus = await checkBungeeTransactionStatus(transactionHash);
+      const bungeeStatus = await checkBungeeTransactionStatus(transactionHash, chainId || 1);
       
       if (onStatusUpdate) {
         onStatusUpdate(bungeeStatus.status);
@@ -557,7 +567,7 @@ export const monitorTradeExecution = async (
       
       if (bungeeStatus.status === 'COMPLETED') {
         // Get transaction receipt
-        const receipt = await waitForTransaction(transactionHash, 1);
+        const receipt = await waitForTransaction(transactionHash, 1, chainId);
         
         return {
           transactionHash,
