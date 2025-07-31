@@ -381,27 +381,19 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     ...theme.shadows.lg,
   },
-  toggleContainer: {
-    flexDirection: 'row',
+  showAddressButton: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xs,
-  },
-  toggleButton: {
     paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.text.tertiary,
   },
-  toggleButtonActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  toggleButtonText: {
-    ...theme.typography.callout,
+  showAddressButtonText: {
+    ...theme.typography.caption1,
     color: theme.colors.text.secondary,
     fontWeight: '600',
-  },
-  toggleButtonTextActive: {
-    color: theme.colors.text.inverse,
+    textAlign: 'center',
   },
   addressSection: {
     width: '100%',

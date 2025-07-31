@@ -23,7 +23,8 @@
       "WebFetch(domain:docs.bungee.exchange)",
       "Bash(lsof:*)",
       "Bash(open:*)",
-      "WebFetch(domain:docs.socket.tech)"
+      "WebFetch(domain:docs.socket.tech)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,7 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
-  const { wallet } = useWallet();
+  const { walletAddress: contextWalletAddress, wallet } = useWallet();
   const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
@@ -56,19 +56,13 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   // Real blockchain data
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
-  const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(1);
+  // Initialize currentChainId based on enabledChains
+  const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(
+    enabledChains.length > 0 ? enabledChains[0] : 1
+  );
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
-  const walletAddress = wallet?.address || '';
-  
-  // Debug wallet state
-  useEffect(() => {
-    console.log('PayScreen - Wallet state:', {
-      wallet,
-      walletAddress,
-      hasWallet: !!wallet,
-      hasAddress: !!walletAddress
-    });
-  }, [wallet, walletAddress]);
+  // Try to get wallet address from either direct property or wallet object
+  const walletAddress = contextWalletAddress || wallet?.address || '';
   
   // Transaction simulation state
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
@@ -82,25 +76,52 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     if (enabledChains.length > 0) {
       // Use the first enabled chain as the current chain
-      setCurrentChainId(enabledChains[0]);
+      const newChainId = enabledChains[0];
+      if (newChainId !== currentChainId) {
+        console.log('PayScreen: Changing chain from', currentChainId, 'to', newChainId);
+        setCurrentChainId(newChainId);
+      }
     } else {
       // Default to Ethereum mainnet if no chains are enabled
-      setCurrentChainId(1);
+      if (currentChainId !== 1) {
+        console.log('PayScreen: No chains enabled, defaulting to mainnet');
+        setCurrentChainId(1);
+      }
     }
-  }, [enabledChains]);
+  }, [enabledChains, currentChainId]);
 
+  // Add ref to track if we're currently loading
+  const loadingRef = useRef(false);
+  
   // Load wallet data on component mount
   useEffect(() => {
     const loadWalletData = async () => {
+      // Prevent multiple simultaneous loads
+      if (loadingRef.current) {
+        console.log('PayScreen: Skipping balance load - already loading');
+        return;
+      }
+      
+      loadingRef.current = true;
+      
       try {
-        setIsLoadingBalance(true);
+        console.log('PayScreen: Loading wallet data...', {
+          walletAddress,
+          contextWalletAddress,
+          wallet,
+          currentChainId,
+          enabledChains
+        });
         
         if (!walletAddress) {
-          console.log('No wallet address available yet');
+          // No wallet address available
+          console.error('PayScreen: No wallet address available');
+          // Don't show alert on initial load, just log
+          loadingRef.current = false;
           return;
         }
         
-        console.log('Loading balance for address:', walletAddress, 'on chain:', currentChainId);
+        console.log('PayScreen: Fetching balance for address:', walletAddress, 'on chain:', currentChainId);
         
         // Get balance from the current chain
         const balanceResult = await getBalance(config, {
@@ -108,36 +129,38 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           chainId: currentChainId
         });
         
-        console.log('Balance result:', balanceResult);
+        console.log('PayScreen: Balance result:', {
+          value: balanceResult.value.toString(),
+          formatted: formatEther(balanceResult.value),
+          chainId: currentChainId
+        });
         
         // Load ETH price
         const priceResult = await getEthPrice();
-        console.log('ETH price:', priceResult);
+        console.log('PayScreen: ETH price:', priceResult);
         
         const balanceInEth = parseFloat(formatEther(balanceResult.value));
+        console.log('PayScreen: Setting balance to:', balanceInEth, 'ETH');
+        
         setBalance(balanceInEth);
         setEthPrice(priceResult);
-        
-        console.log('Balance set to:', balanceInEth, 'ETH');
-      } catch (error) {
-        console.error('Failed to load wallet data:', error);
-        // Don't show alert for initial load failures
-      } finally {
         setIsLoadingBalance(false);
+      } catch (error) {
+        console.error('PayScreen: Failed to load wallet data:', error);
+        setIsLoadingBalance(false);
+        // Don't show alert for balance loading errors, just log
+      } finally {
+        loadingRef.current = false;
       }
     };
 
-    loadWalletData();
-    
-    // Set up periodic refresh every 30 seconds
-    const intervalId = setInterval(() => {
-      if (walletAddress) {
-        loadWalletData();
-      }
-    }, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [walletAddress, currentChainId]);
+    if (walletAddress || contextWalletAddress) {
+      setIsLoadingBalance(true);
+      loadWalletData();
+    } else {
+      setIsLoadingBalance(false);
+    }
+  }, [walletAddress, contextWalletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
   const simulateTransactionDebounced = useCallback(
@@ -403,9 +426,14 @@ This action requires biometric authentication.`;
             Available Balance {enabledChains.length > 0 && CHAIN_NAMES[currentChainId] ? `(${CHAIN_NAMES[currentChainId]})` : ''}
           </Text>
           {isLoadingBalance ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-              <Text style={styles.loadingText}>Loading balance...</Text>
+            <View>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.balanceETH}>Loading balance...</Text>
+            </View>
+          ) : !walletAddress ? (
+            <View>
+              <Text style={styles.balanceAmount}>$0.00</Text>
+              <Text style={styles.balanceETH}>No wallet connected</Text>
             </View>
           ) : (
             <>
@@ -761,9 +789,6 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.warning,
     flex: 1,
-  },
-  errorText: {
-    color: theme.colors.danger,
   },
   validationContainer: {
     width: 24,
