@@ -46,10 +46,12 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amountUSD, setAmountUSD] = useState('');
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [resolvedDisplayName, setResolvedDisplayName] = useState<string | null>(null);
   const [isResolvingTag, setIsResolvingTag] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
   
   // Real blockchain data
   const [balance, setBalance] = useState<number>(0);
@@ -105,19 +107,21 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     loadWalletData();
-    
-    // Seed demo tags for testing
-    tagService.seedDemoTags();
+    // Tags are now managed through the database
   }, [walletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
   const simulateTransactionDebounced = useCallback(
-    async (recipientAddr: string, amountEth: string) => {
-      if (!recipientAddr || !amountEth || !walletAddress) return;
+    async (recipientAddr: string, amountInUSD: string) => {
+      if (!recipientAddr || !amountInUSD || !walletAddress) return;
+      
+      // Convert USD to ETH
+      const ethAmount = parseFloat(amountInUSD) / ethPrice;
+      if (isNaN(ethAmount) || ethAmount <= 0) return;
       
       try {
         setIsSimulating(true);
-        const amountWei = parseEther(amountEth).toString();
+        const amountWei = parseEther(ethAmount.toString()).toString();
         
         const result = await simulateTransaction({
           from: walletAddress,
@@ -145,63 +149,75 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (isValidAddress && amount && !isNaN(parseFloat(amount)) && resolvedAddress) {
+    if (isValidAddress && amountUSD && !isNaN(parseFloat(amountUSD)) && resolvedAddress) {
       // Debounce simulation calls
       const timeoutId = setTimeout(() => {
-        simulateTransactionDebounced(resolvedAddress, amount);
+        simulateTransactionDebounced(resolvedAddress, amountUSD);
       }, 500);
       
       return () => clearTimeout(timeoutId);
     } else {
       setSimulation(null);
     }
-  }, [resolvedAddress, amount, isValidAddress, simulateTransactionDebounced]);
+  }, [resolvedAddress, amountUSD, isValidAddress, simulateTransactionDebounced]);
 
   const handleRecipientChange = async (text: string) => {
-    setRecipient(text);
+    // Remove @ if user types it
+    const cleanText = text.replace(/^@/, '');
+    setRecipient(cleanText);
     setResolvedAddress(null);
+    setResolvedDisplayName(null);
+    setTagError(null);
 
-    // Validate recipient
-    if (text.startsWith('@')) {
-      // Tag validation and resolution
-      setIsResolvingTag(true);
-      
-      try {
-        const tagValidation = tagService.validateTag(text);
-        
-        if (tagValidation.isValid) {
-          const address = await tagService.resolveTag(text);
-          
-          if (address) {
-            setResolvedAddress(address);
-            setIsValidAddress(true);
-          } else {
-            setIsValidAddress(false);
-          }
-        } else {
-          setIsValidAddress(false);
-        }
-      } catch (error) {
-        console.error('Tag resolution error:', error);
-        setIsValidAddress(false);
-      } finally {
-        setIsResolvingTag(false);
-      }
-    } else if (text.startsWith('0x')) {
+    // Handle empty input
+    if (!cleanText) {
+      setIsValidAddress(null);
+      return;
+    }
+
+    // Check if it's an Ethereum address (user pasted an address)
+    if (cleanText.startsWith('0x')) {
       // Ethereum address validation
       try {
-        const isValid = isAddress(text);
+        const isValid = isAddress(cleanText);
         setIsValidAddress(isValid);
         if (isValid) {
           // Get checksummed address
-          const checksummedAddress = getAddress(text);
+          const checksummedAddress = getAddress(cleanText);
           setResolvedAddress(checksummedAddress);
         }
       } catch {
         setIsValidAddress(false);
       }
     } else {
-      setIsValidAddress(null);
+      // Assume it's a tag/username
+      setIsResolvingTag(true);
+      
+      try {
+        const tagValidation = tagService.validateTag(cleanText);
+        
+        if (tagValidation.isValid) {
+          const tagMapping = await tagService.getTagMapping(cleanText);
+          
+          if (tagMapping) {
+            setResolvedAddress(tagMapping.address);
+            setResolvedDisplayName(tagMapping.displayName || cleanText);
+            setIsValidAddress(true);
+          } else {
+            setIsValidAddress(false);
+            setTagError('Username not found');
+          }
+        } else {
+          setIsValidAddress(false);
+          setTagError(tagValidation.error || 'Invalid username');
+        }
+      } catch (error) {
+        console.error('Tag resolution error:', error);
+        setIsValidAddress(false);
+        setTagError(error instanceof Error ? error.message : 'Network error');
+      } finally {
+        setIsResolvingTag(false);
+      }
     }
   };
 
@@ -209,21 +225,25 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     // Only allow numbers and one decimal point
     const cleaned = text.replace(/[^0-9.]/g, '');
     const parts = cleaned.split('.');
-    if (parts.length > 2) {return;}
-    if (parts[1]?.length > 4) {return;} // Max 4 decimal places
-    setAmount(cleaned);
+    if (parts.length > 2) return;
+    if (parts[1]?.length > 2) return; // Max 2 decimal places for USD
+    setAmountUSD(cleaned);
   };
 
   const handleSend = async () => {
     if (!isValidAddress) {
-      Alert.alert('Invalid Recipient', 'Please enter a valid tag or Ethereum address.');
+      const errorMessage = tagError || 'Please enter a valid username or Ethereum address.';
+      Alert.alert('Invalid Recipient', errorMessage);
       return;
     }
 
-    if (!amount || parseFloat(amount) === 0) {
+    if (!amountUSD || parseFloat(amountUSD) === 0) {
       Alert.alert('Invalid Amount', 'Please enter an amount to send.');
       return;
     }
+    
+    // Convert USD to ETH for the transaction
+    const ethAmount = parseFloat(amountUSD) / ethPrice;
 
     if (!simulation || !simulation.success) {
       Alert.alert('Transaction Error', simulation?.error || 'Unable to simulate transaction');
@@ -240,12 +260,19 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
     );
 
+    const recipientDisplay = resolvedDisplayName 
+      ? `@${recipient} (${resolvedDisplayName})`
+      : recipient.startsWith('0x') 
+        ? `${recipient.slice(0, 6)}...${recipient.slice(-4)}`
+        : `@${recipient}`;
+    
     const confirmMessage = `
-Send ${amount} ETH to ${recipient}
+Send $${amountUSD} to ${recipientDisplay}
 Network: ${CHAIN_NAMES[currentChainId] || 'Unknown'}
 
+Amount: ${ethAmount.toFixed(6)} ETH
 Network Fee: ~${parseFloat(gasEth).toFixed(6)} ETH (~$${gasEstimateUSD})
-Total: ${(parseFloat(amount) + parseFloat(gasEth)).toFixed(6)} ETH
+Total: ${(ethAmount + parseFloat(gasEth)).toFixed(6)} ETH (~$${(parseFloat(amountUSD) + parseFloat(gasEstimateUSD)).toFixed(2)})
 
 ${warningMessages ? '\n⚠️ Warnings:\n' + warningMessages : ''}
 
@@ -276,7 +303,9 @@ This action requires biometric authentication.`;
         return;
       }
 
-      const amountWei = parseEther(amount).toString();
+      // Convert USD to ETH for the transaction
+      const ethAmount = parseFloat(amountUSD) / ethPrice;
+      const amountWei = parseEther(ethAmount.toString()).toString();
       
       const result = await executeTransaction({
         from: walletAddress,
@@ -295,8 +324,11 @@ This action requires biometric authentication.`;
             onPress: () => {
               // Reset form
               setRecipient('');
-              setAmount('');
+              setAmountUSD('');
               setSimulation(null);
+              setResolvedAddress(null);
+              setResolvedDisplayName(null);
+              setTagError(null);
               navigation.navigate('Home');
             },
           },
@@ -313,14 +345,16 @@ This action requires biometric authentication.`;
     }
   };
 
-  // Calculate total amount including gas fees
+  // Calculate ETH equivalent and total amounts
+  const ethAmount = amountUSD ? parseFloat(amountUSD) / ethPrice : 0;
   const gasEstimateEth = simulation && simulation.success ? 
     parseFloat(formatEther(
       BigInt(simulation.gasLimit) * BigInt(simulation.maxFeePerGas)
-    )) : 0.0003; // Fallback estimate (~$1 at $3000 ETH)
+    )) : 0.0003; // Fallback estimate
   
-  const totalAmount = amount ? parseFloat(amount) + gasEstimateEth : gasEstimateEth;
-  const isInsufficientBalance = totalAmount > balance;
+  const totalAmountETH = ethAmount + gasEstimateEth;
+  const totalAmountUSD = parseFloat(amountUSD || '0') + parseFloat(gasEstimateUSD);
+  const isInsufficientBalance = totalAmountETH > balance;
   const balanceUSD = balance * ethPrice;
 
   return (
@@ -334,27 +368,28 @@ This action requires biometric authentication.`;
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Balance Display */}
+        {/* Balance Display - USD First */}
         <View style={styles.balanceSection}>
           <Text style={styles.balanceLabel}>
             Available Balance {enabledChains.length > 0 && CHAIN_NAMES[currentChainId] ? `(${CHAIN_NAMES[currentChainId]})` : ''}
           </Text>
           <Text style={styles.balanceAmount}>
-            {walletAddress ? balance.toFixed(4) : '0.0000'} ETH
+            ${walletAddress ? balanceUSD.toFixed(2) : '0.00'}
             {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
           </Text>
-          <Text style={styles.balanceUSD}>${walletAddress ? balanceUSD.toFixed(2) : '0.00'}</Text>
+          <Text style={styles.balanceETH}>{walletAddress ? balance.toFixed(4) : '0.0000'} ETH</Text>
         </View>
 
         {/* Recipient Input */}
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>To</Text>
           <View style={styles.inputContainer}>
+            <Text style={styles.atSymbol}>@</Text>
             <TextInput
               style={styles.input}
               value={recipient}
               onChangeText={handleRecipientChange}
-              placeholder="@tag or 0x address"
+              placeholder="username"
               placeholderTextColor={theme.colors.text.tertiary}
               autoCapitalize="none"
               autoCorrect={false}
@@ -373,42 +408,62 @@ This action requires biometric authentication.`;
               </View>
             )}
           </View>
-          {resolvedAddress && recipient.startsWith('@') && (
+          {/* Show resolved display name */}
+          {resolvedDisplayName && !recipient.startsWith('0x') && (
+            <Text style={styles.resolvedName}>
+              {resolvedDisplayName}
+            </Text>
+          )}
+          {/* Show resolved address for tags */}
+          {resolvedAddress && !recipient.startsWith('0x') && (
             <Text style={styles.resolvedAddress}>
               {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
             </Text>
           )}
+          {/* Show error message */}
+          {tagError && !isResolvingTag && (
+            <Text style={styles.errorText}>
+              {tagError}
+            </Text>
+          )}
+          {/* Subtle hint about address support */}
+          <Text style={styles.inputHint}>
+            You can also paste an Ethereum address
+          </Text>
         </View>
 
-        {/* Amount Input */}
+        {/* Amount Input - USD First */}
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Amount</Text>
           <View style={styles.amountContainer}>
             <View style={styles.inputContainer}>
+              <Text style={styles.currencySymbol}>$</Text>
               <TextInput
                 style={[styles.input, styles.amountInput]}
-                value={amount}
+                value={amountUSD}
                 onChangeText={handleAmountChange}
-                placeholder="0.0000"
+                placeholder="0.00"
                 placeholderTextColor={theme.colors.text.tertiary}
                 keyboardType="decimal-pad"
               />
-              <Text style={styles.currencyLabel}>ETH</Text>
+              <Text style={styles.currencyLabel}>USD</Text>
             </View>
-            {amount && (
-              <Text style={styles.amountUSD}>
-                ≈ ${(parseFloat(amount) * ethPrice).toFixed(2)}
+            {amountUSD && (
+              <Text style={styles.ethEquivalent}>
+                ≈ {ethAmount.toFixed(6)} ETH
               </Text>
             )}
           </View>
         </View>
 
         {/* Transaction Summary */}
-        {amount && (
+        {amountUSD && (
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Amount</Text>
-              <Text style={styles.summaryValue}>{amount} ETH</Text>
+              <Text style={styles.summaryValue}>
+                ${amountUSD} ({ethAmount.toFixed(6)} ETH)
+              </Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Network Fee</Text>
@@ -454,7 +509,7 @@ This action requires biometric authentication.`;
                 styles.summaryTotalValue,
                 isInsufficientBalance && styles.insufficientBalance,
               ]}>
-                {totalAmount.toFixed(6)} ETH
+                ${totalAmountUSD.toFixed(2)} ({totalAmountETH.toFixed(6)} ETH)
               </Text>
             </View>
           </View>
@@ -465,17 +520,17 @@ This action requires biometric authentication.`;
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)) && styles.sendButtonDisabled,
+              (!isValidAddress || !amountUSD || isInsufficientBalance || isExecuting || (simulation && !simulation.success)) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={!isValidAddress || !amount || isInsufficientBalance || isExecuting || (simulation && !simulation.success)}
+            disabled={!isValidAddress || !amountUSD || isInsufficientBalance || isExecuting || (simulation && !simulation.success)}
           >
             {isExecuting ? (
               <ActivityIndicator size="small" color={theme.colors.text.inverse} />
             ) : (
               <Text style={[
                 styles.sendButtonText,
-                (!isValidAddress || !amount || isInsufficientBalance || (simulation && !simulation.success)) && styles.sendButtonTextDisabled,
+                (!isValidAddress || !amountUSD || isInsufficientBalance || (simulation && !simulation.success)) && styles.sendButtonTextDisabled,
               ]}>
                 {isInsufficientBalance 
                   ? 'Insufficient Balance' 
@@ -518,7 +573,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.xs,
   },
-  balanceUSD: {
+  balanceETH: {
     ...theme.typography.callout,
     color: theme.colors.text.secondary,
   },
@@ -555,10 +610,40 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     marginLeft: theme.spacing.sm,
   },
-  amountUSD: {
+  ethEquivalent: {
     ...theme.typography.footnote,
     color: theme.colors.text.tertiary,
     paddingHorizontal: theme.spacing.sm,
+  },
+  atSymbol: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    marginRight: theme.spacing.xs,
+  },
+  currencySymbol: {
+    ...theme.typography.title2,
+    color: theme.colors.text.secondary,
+    marginRight: theme.spacing.xs,
+  },
+  resolvedName: {
+    ...theme.typography.callout,
+    color: theme.colors.text.primary,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    fontWeight: '600',
+  },
+  errorText: {
+    ...theme.typography.caption1,
+    color: theme.colors.danger,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  inputHint: {
+    ...theme.typography.caption2,
+    color: theme.colors.text.quaternary,
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    fontStyle: 'italic',
   },
   summaryCard: {
     backgroundColor: theme.colors.surface,
@@ -639,9 +724,6 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.warning,
     flex: 1,
-  },
-  errorText: {
-    color: theme.colors.danger,
   },
   validationContainer: {
     width: 24,
