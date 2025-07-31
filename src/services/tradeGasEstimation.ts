@@ -5,6 +5,7 @@
 
 import { getCurrentGasPrices } from './transactionService';
 import { VerifiedToken } from '../config/tokens';
+import { SupportedChainId } from '../config/chains';
 
 export interface TradeGasEstimate {
   approvalGas?: string;      // Gas for token approval (if needed)
@@ -30,17 +31,19 @@ const GAS_LIMITS = {
  * @param token - The token being traded
  * @param ethPrice - Current ETH price in USD
  * @param hasExistingApproval - Whether the token already has approval
+ * @param chainId - The chain ID to estimate gas for
  * @returns Trade gas estimate
  */
 export const estimateTradeGas = async (
   tradeType: 'buy' | 'sell',
   token: VerifiedToken,
   ethPrice: number,
-  hasExistingApproval: boolean = false
+  hasExistingApproval: boolean = false,
+  chainId: SupportedChainId = 1
 ): Promise<TradeGasEstimate> => {
   try {
-    // Get current gas prices
-    const gasPrices = await getCurrentGasPrices();
+    // Get current gas prices for the specific chain
+    const gasPrices = await getCurrentGasPrices(chainId);
     
     let approvalGas: string | undefined;
     let tradeGas: string;

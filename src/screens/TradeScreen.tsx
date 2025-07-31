@@ -114,18 +114,22 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     if (selectedToken && ethPrice > 0) {
       updateGasEstimate();
     }
-  }, [selectedToken, tradeMode, ethPrice]);
+  }, [selectedToken, tradeMode, ethPrice, enabledChains]);
   
   const updateGasEstimate = async () => {
     if (!selectedToken) return;
     
     setIsEstimatingGas(true);
     try {
+      // Use the first enabled chain or default to mainnet
+      const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
+      
       const estimate = await estimateTradeGas(
         tradeMode,
         selectedToken,
         ethPrice,
-        false // We don't have approval checking yet
+        false, // We don't have approval checking yet
+        currentChainId
       );
       setGasEstimate(estimate);
     } catch (error) {
