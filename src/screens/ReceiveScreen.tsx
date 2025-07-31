@@ -489,7 +489,8 @@ const styles = StyleSheet.create({
     color: theme.colors.surface,
   },
   actionButtonDisabled: {
-    backgroundColor: theme.colors.neutral[100],
+    backgroundColor: theme.colors.surface,
+    opacity: 0.6,
   },
   actionButtonTextDisabled: {
     color: theme.colors.text.tertiary,
