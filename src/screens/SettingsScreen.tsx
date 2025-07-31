@@ -16,7 +16,7 @@ import { CHAIN_IDS, CHAIN_CONFIGS } from '../config/chains';
 
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { enabledChains, toggleChain, isChainEnabled } = useSettings();
+  const { enabledChains, toggleChain, isChainEnabled, tradeMode, setTradeMode } = useSettings();
 
   const handleBack = () => {
     navigation.goBack();
@@ -97,6 +97,64 @@ const SettingsScreen: React.FC = () => {
             <Icon name="information-circle-outline" size={20} color={theme.colors.text.secondary} />
             <Text style={styles.noteText}>
               Only one network can be active at a time
+            </Text>
+          </View>
+        </View>
+
+        {/* Trade Settings Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Trade Settings</Text>
+          <Text style={styles.sectionDescription}>
+            Choose how trades are executed
+          </Text>
+
+          <View style={styles.chainItem}>
+            <View style={styles.chainInfo}>
+              <View style={styles.chainNameRow}>
+                <Icon name="swap-horizontal" size={24} color={theme.colors.text.primary} />
+                <Text style={styles.chainName}>
+                  Trade Mode
+                </Text>
+              </View>
+            </View>
+            <View style={styles.tradeModeSelector}>
+              <TouchableOpacity
+                style={[
+                  styles.tradeModeButton,
+                  tradeMode === 'manual' && styles.tradeModeButtonActive
+                ]}
+                onPress={() => setTradeMode('manual')}
+              >
+                <Text style={[
+                  styles.tradeModeButtonText,
+                  tradeMode === 'manual' && styles.tradeModeButtonTextActive
+                ]}>
+                  Manual
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.tradeModeButton,
+                  tradeMode === 'auto' && styles.tradeModeButtonActive
+                ]}
+                onPress={() => setTradeMode('auto')}
+              >
+                <Text style={[
+                  styles.tradeModeButtonText,
+                  tradeMode === 'auto' && styles.tradeModeButtonTextActive
+                ]}>
+                  Auto
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.note}>
+            <Icon name="information-circle-outline" size={20} color={theme.colors.text.secondary} />
+            <Text style={styles.noteText}>
+              {tradeMode === 'manual' 
+                ? 'Manual mode requires confirmation before executing trades'
+                : 'Auto mode executes trades automatically when conditions are met'}
             </Text>
           </View>
         </View>
@@ -200,6 +258,31 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     marginLeft: theme.spacing.xs,
     flex: 1,
+  },
+  tradeModeSelector: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: 2,
+  },
+  tradeModeButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+  },
+  tradeModeButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  tradeModeButtonText: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  tradeModeButtonTextActive: {
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
   },
 });
 

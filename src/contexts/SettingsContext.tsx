@@ -8,11 +8,14 @@ interface SettingsContextType {
   toggleChain: (chainId: SupportedChainId) => void;
   setEnabledChains: (chains: SupportedChainId[]) => void;
   isLoading: boolean;
+  tradeMode: 'manual' | 'auto';
+  setTradeMode: (mode: 'manual' | 'auto') => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 const STORAGE_KEY = '@BlirpMe:enabledChains';
+const TRADE_MODE_KEY = '@BlirpMe:tradeMode';
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
@@ -29,6 +32,7 @@ interface SettingsProviderProps {
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
   const [enabledChains, setEnabledChainsState] = useState<SupportedChainId[]>(DEFAULT_ENABLED_CHAINS);
   const [isLoading, setIsLoading] = useState(true);
+  const [tradeMode, setTradeModeState] = useState<'manual' | 'auto'>('manual');
 
   // Load settings from storage on mount
   useEffect(() => {
@@ -37,6 +41,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   const loadSettings = async () => {
     try {
+      // Load enabled chains
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const chains = JSON.parse(stored) as number[];
@@ -48,6 +53,12 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         if (validChains.length > 0) {
           setEnabledChainsState(validChains);
         }
+      }
+      
+      // Load trade mode
+      const storedTradeMode = await AsyncStorage.getItem(TRADE_MODE_KEY);
+      if (storedTradeMode && (storedTradeMode === 'manual' || storedTradeMode === 'auto')) {
+        setTradeModeState(storedTradeMode);
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -82,6 +93,15 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     // If the chain is already enabled, do nothing (can't disable the only enabled chain)
   };
 
+  const setTradeMode = async (mode: 'manual' | 'auto') => {
+    try {
+      setTradeModeState(mode);
+      await AsyncStorage.setItem(TRADE_MODE_KEY, mode);
+    } catch (error) {
+      console.error('Failed to save trade mode:', error);
+    }
+  };
+
   return (
     <SettingsContext.Provider
       value={{
@@ -90,6 +110,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         toggleChain,
         setEnabledChains,
         isLoading,
+        tradeMode,
+        setTradeMode,
       }}
     >
       {children}

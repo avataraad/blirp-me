@@ -24,8 +24,10 @@ import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWi
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
 import { estimateTradeGas, TradeGasEstimate } from '../services/tradeGasEstimation';
-import { checkTokenAllowance } from '../services/tradeExecutionService';
+import { checkTokenAllowance, executeTrade } from '../services/tradeExecutionService';
 import { parseEther, parseUnits } from 'viem';
+import { getBungeeQuote } from '../services/bungeeService';
+import { Alert } from 'react-native';
 
 // Bungee contract address for approval checks
 const BUNGEE_CONTRACT = '0x3a23F943181408EAC424116Af7b7790c94Cb97a5';
@@ -44,15 +46,13 @@ type Props = {
 };
 
 type TradeMode = 'buy' | 'sell';
-type TradeType = 'manual' | 'auto';
 
 const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress } = useWallet();
-  const { enabledChains } = useSettings();
+  const { enabledChains, tradeMode: tradeType } = useSettings();
   
   // State
   const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
-  const [tradeType, setTradeType] = useState<TradeType>('manual');
   const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
   const [tokens, setTokens] = useState<TokenWithBalance[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(true);
@@ -273,7 +273,10 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
   
-  const handleReviewTrade = () => {
+  const [isGettingQuote, setIsGettingQuote] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<string>('');
+
+  const handleExecuteTrade = async () => {
     if (!selectedToken || !amountUSD) return;
     
     // Calculate amount in wei/smallest unit
@@ -290,10 +293,6 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         if (isMaxAmount && selectedToken.balance) {
           // Use exact ETH balance for max trades
           amountWei = selectedToken.balance.toString();
-          console.log('Using exact ETH balance for max trade:', {
-            balance: selectedToken.balance,
-            amountWei
-          });
         } else {
           // For ETH, convert USD to ETH amount
           const ethAmount = usdAmount / ethPrice;
@@ -304,11 +303,6 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         if (isMaxAmount && selectedToken.balance) {
           // Use the exact token balance for max trades
           amountWei = selectedToken.balance.toString();
-          console.log('Using exact token balance for max trade:', {
-            token: selectedToken.symbol,
-            balance: selectedToken.balance,
-            amountWei
-          });
         } else {
           // For partial trades, convert USD to token amount
           const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
@@ -318,24 +312,9 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
           
           // Ensure we don't exceed the balance
           if (selectedToken.balance && BigInt(amountWei) > BigInt(selectedToken.balance)) {
-            console.log('Amount exceeds balance, using balance instead:', {
-              requested: amountWei,
-              balance: selectedToken.balance
-            });
             amountWei = selectedToken.balance.toString();
           }
         }
-        
-        // Debug logging
-        console.log('Token conversion:', {
-          token: selectedToken.symbol,
-          usdAmount,
-          tokenPrice: selectedToken.usdPrice,
-          isMaxAmount,
-          balance: selectedToken.balance,
-          decimals: selectedToken.decimals,
-          amountWei
-        });
       }
     }
     
@@ -346,15 +325,107 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     const fromToken = tradeMode === 'buy' ? ethToken : selectedToken;
     const toToken = tradeMode === 'buy' ? selectedToken : ethToken;
     
-    // Navigate to review screen
-    navigation.navigate('TradeReview', {
-      tradeMode,
-      tradeType,
-      fromToken,
-      toToken,
-      amountUSD,
-      amountWei
-    });
+    try {
+      setIsGettingQuote(true);
+      setExecutionStatus('Getting quote...');
+      
+      // Get quote from Bungee
+      const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
+      const quoteResponse = await getBungeeQuote({
+        fromChainId: currentChainId,
+        fromTokenAddress: fromToken.address,
+        fromTokenDecimals: fromToken.decimals,
+        toChainId: currentChainId,
+        toTokenAddress: toToken.address,
+        toTokenDecimals: toToken.decimals,
+        userAddress: walletAddress!,
+        amount: amountWei,
+        slippage: 100, // 1% slippage
+      });
+      
+      if (!quoteResponse.success || !quoteResponse.routes || quoteResponse.routes.length === 0) {
+        throw new Error('No routes available for this trade');
+      }
+      
+      const bestRoute = quoteResponse.routes[0];
+      const outputAmount = BigInt(bestRoute.toAmount);
+      const outputFormatted = formatTokenAmount(outputAmount.toString(), toToken.decimals, 6);
+      
+      // Show confirmation dialog
+      Alert.alert(
+        'Confirm Trade',
+        `${tradeMode === 'buy' ? 'Buy' : 'Sell'} ${calculateNativeAmount()} ${selectedToken.symbol} for ${outputFormatted} ${toToken.symbol}?\n\nEstimated gas: ${gasEstimate?.totalGasUSD || '$0.00'}`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              setIsGettingQuote(false);
+              setExecutionStatus('');
+            }
+          },
+          {
+            text: 'Confirm',
+            style: 'default',
+            onPress: async () => {
+              try {
+                setExecutionStatus('Executing trade...');
+                
+                const result = await executeTrade({
+                  routeId: bestRoute.routeId,
+                  route: bestRoute,
+                  fromToken,
+                  toToken,
+                  amountWei,
+                  userAddress: walletAddress!,
+                  slippage: 100,
+                  quoteResponse,
+                  tradeType
+                }, setExecutionStatus);
+                
+                if (result.status === 'success') {
+                  Alert.alert(
+                    'Trade Successful',
+                    `Your trade has been completed successfully!`,
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => {
+                          // Reset form
+                          setAmountUSD('');
+                          setIsMaxAmount(false);
+                          // Reload balances
+                          loadTokensAndPrices();
+                        }
+                      }
+                    ]
+                  );
+                } else {
+                  throw new Error(result.error || 'Trade failed');
+                }
+              } catch (error) {
+                Alert.alert(
+                  'Trade Failed',
+                  error instanceof Error ? error.message : 'Unknown error occurred',
+                  [{ text: 'OK' }]
+                );
+              } finally {
+                setIsGettingQuote(false);
+                setExecutionStatus('');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert(
+        'Quote Failed',
+        error instanceof Error ? error.message : 'Failed to get quote',
+        [{ text: 'OK' }]
+      );
+      setIsGettingQuote(false);
+      setExecutionStatus('');
+    }
   };
   
   const renderTokenItem = ({ item }: { item: TokenWithBalance }) => {
@@ -415,6 +486,13 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         style={styles.keyboardView}
       >
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Available ETH Balance */}
+          <View style={styles.balanceSection}>
+            <Text style={styles.balanceLabel}>Available ETH</Text>
+            <Text style={styles.balanceAmount}>${ethBalance.toFixed(2)}</Text>
+            <Text style={styles.balanceETH}>{formatTokenAmount(ethToken?.balance || '0', 18)} ETH</Text>
+          </View>
+
           {/* Trade Mode Toggle */}
           <View style={styles.tradeModeContainer}>
             <TouchableOpacity
@@ -431,26 +509,6 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <Text style={[styles.tradeModeText, tradeMode === 'sell' && styles.tradeModeTextActive]}>
                 Sell
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Trade Type Toggle */}
-          <View style={styles.tradeTypeContainer}>
-            <TouchableOpacity
-              style={[styles.tradeTypeButton, tradeType === 'manual' && styles.tradeTypeButtonActive]}
-              onPress={() => setTradeType('manual')}
-            >
-              <Text style={[styles.tradeTypeText, tradeType === 'manual' && styles.tradeTypeTextActive]}>
-                Manual
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tradeTypeButton, tradeType === 'auto' && styles.tradeTypeButtonActive]}
-              onPress={() => setTradeType('auto')}
-            >
-              <Text style={[styles.tradeTypeText, tradeType === 'auto' && styles.tradeTypeTextActive]}>
-                Auto
               </Text>
             </TouchableOpacity>
           </View>
@@ -576,16 +634,28 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </View>
           
-          {/* Review Button */}
+          {/* Trade Button */}
           <TouchableOpacity
-            style={[styles.reviewButton, isReviewDisabled() && styles.reviewButtonDisabled]}
-            disabled={isReviewDisabled()}
-            onPress={handleReviewTrade}
+            style={[styles.reviewButton, (isReviewDisabled() || isGettingQuote) && styles.reviewButtonDisabled]}
+            disabled={isReviewDisabled() || isGettingQuote}
+            onPress={handleExecuteTrade}
           >
-            <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
-              Review Trade
-            </Text>
+            {isGettingQuote ? (
+              <ActivityIndicator size="small" color={theme.colors.text.inverse} />
+            ) : (
+              <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
+                {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedToken?.symbol || ''}
+              </Text>
+            )}
           </TouchableOpacity>
+          
+          {/* Execution Status */}
+          {executionStatus && (
+            <View style={styles.executionStatusContainer}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Text style={styles.executionStatusText}>{executionStatus}</Text>
+            </View>
+          )}
           
           {/* Warnings */}
           {tradeMode === 'buy' && parseFloat(amountUSD) > parseFloat(getMaxBuyAmount()) && (
@@ -681,31 +751,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
   },
   tradeModeTextActive: {
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-  tradeTypeContainer: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: 4,
-    marginBottom: theme.spacing.xl,
-  },
-  tradeTypeButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-  },
-  tradeTypeButtonActive: {
-    backgroundColor: theme.colors.background,
-    ...theme.shadows.sm,
-  },
-  tradeTypeText: {
-    ...theme.typography.callout,
-    color: theme.colors.text.secondary,
-  },
-  tradeTypeTextActive: {
     color: theme.colors.text.primary,
     fontWeight: '600',
   },
@@ -926,6 +971,42 @@ const styles = StyleSheet.create({
   },
   tokenTextDisabled: {
     color: theme.colors.text.tertiary,
+  },
+  balanceSection: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginVertical: theme.spacing.md,
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: theme.spacing.xs,
+  },
+  balanceAmount: {
+    ...theme.typography.title1,
+    color: theme.colors.text.primary,
+    fontWeight: '700',
+  },
+  balanceETH: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
+  },
+  executionStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  executionStatusText: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.sm,
   },
 });
 

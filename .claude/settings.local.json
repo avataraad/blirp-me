@@ -24,7 +24,8 @@
       "Bash(lsof:*)",
       "Bash(open:*)",
       "WebFetch(domain:docs.socket.tech)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git branch:*)"
     ],
     "deny": []
   }
