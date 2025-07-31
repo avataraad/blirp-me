@@ -1,18 +1,12 @@
-import { MMKV } from 'react-native-mmkv';
 import { isAddress } from 'viem';
-
-// Initialize MMKV for tag storage
-const tagStorage = new MMKV({
-  id: 'blirp-tag-storage',
-  encryptionKey: 'blirp-tag-encryption-key',
-});
+import userProfileService from './userProfileService';
 
 // Types
 export interface TagMapping {
-  tag: string;           // @username (without @)
+  tag: string;           // username (without @)
   address: string;       // 0x...
+  displayName?: string;  // User's display name
   verified: boolean;     // verification status
-  lastUpdated: number;   // timestamp
 }
 
 export interface TagValidationResult {
@@ -24,7 +18,6 @@ export interface TagValidationResult {
 class TagService {
   // Tag validation regex - alphanumeric, underscores, 3-20 chars
   private readonly TAG_REGEX = /^[a-zA-Z0-9_]{3,20}$/;
-  private readonly TAG_PREFIX = 'tag_';
 
   /**
    * Validate and normalize a tag
@@ -59,48 +52,15 @@ class TagService {
   }
 
   /**
-   * Register a new tag mapping
+   * Register a new tag mapping (deprecated - use userProfileService.createProfile instead)
    */
   async registerTag(tag: string, address: string): Promise<boolean> {
-    try {
-      // Validate tag
-      const validation = this.validateTag(tag);
-      if (!validation.isValid || !validation.normalizedTag) {
-        return false;
-      }
-
-      // Validate Ethereum address
-      if (!isAddress(address)) {
-        return false;
-      }
-
-      // Check if tag already exists
-      const existing = await this.resolveTag(validation.normalizedTag);
-      if (existing) {
-        return false;
-      }
-
-      // Store tag mapping
-      const mapping: TagMapping = {
-        tag: validation.normalizedTag,
-        address: address.toLowerCase(),
-        verified: false,
-        lastUpdated: Date.now(),
-      };
-
-      tagStorage.set(
-        `${this.TAG_PREFIX}${validation.normalizedTag}`,
-        JSON.stringify(mapping)
-      );
-
-      return true;
-    } catch (error) {
-      return false;
-    }
+    console.warn('tagService.registerTag is deprecated. Use userProfileService.createProfile instead.');
+    return false;
   }
 
   /**
-   * Resolve a tag to an Ethereum address
+   * Resolve a tag to an Ethereum address using database
    */
   async resolveTag(tag: string): Promise<string | null> {
     try {
@@ -110,24 +70,22 @@ class TagService {
         return null;
       }
 
-      // Look up tag in storage
-      const mappingData = tagStorage.getString(
-        `${this.TAG_PREFIX}${validation.normalizedTag}`
-      );
-
-      if (!mappingData) {
+      // Look up tag in database
+      const profile = await userProfileService.getProfileByTag(validation.normalizedTag);
+      
+      if (!profile) {
         return null;
       }
 
-      const mapping: TagMapping = JSON.parse(mappingData);
-      return mapping.address;
+      return profile.ethereum_address;
     } catch (error) {
-      return null;
+      console.error('Failed to resolve tag:', error);
+      throw new Error('Unable to lookup username. Please check your connection and try again.');
     }
   }
 
   /**
-   * Get tag mapping details
+   * Get tag mapping details from database
    */
   async getTagMapping(tag: string): Promise<TagMapping | null> {
     try {
@@ -136,22 +94,26 @@ class TagService {
         return null;
       }
 
-      const mappingData = tagStorage.getString(
-        `${this.TAG_PREFIX}${validation.normalizedTag}`
-      );
-
-      if (!mappingData) {
+      const profile = await userProfileService.getProfileByTag(validation.normalizedTag);
+      
+      if (!profile) {
         return null;
       }
 
-      return JSON.parse(mappingData);
+      return {
+        tag: profile.tag,
+        address: profile.ethereum_address,
+        displayName: profile.display_name || profile.tag,
+        verified: profile.is_verified || false
+      };
     } catch (error) {
+      console.error('Failed to get tag mapping:', error);
       return null;
     }
   }
 
   /**
-   * Check if a tag is available
+   * Check if a tag is available using database
    */
   async isTagAvailable(tag: string): Promise<boolean> {
     const validation = this.validateTag(tag);
@@ -159,73 +121,34 @@ class TagService {
       return false;
     }
 
-    const existing = await this.resolveTag(tag);
-    return !existing;
-  }
-
-  /**
-   * Get all registered tags (for autocomplete)
-   */
-  getAllTags(): string[] {
     try {
-      const keys = tagStorage.getAllKeys();
-      return keys
-        .filter(key => key.startsWith(this.TAG_PREFIX))
-        .map(key => {
-          const data = tagStorage.getString(key);
-          if (data) {
-            const mapping: TagMapping = JSON.parse(data);
-            return `@${mapping.tag}`;
-          }
-          return null;
-        })
-        .filter(Boolean) as string[];
+      return await userProfileService.isTagAvailable(tag);
     } catch (error) {
-      return [];
-    }
-  }
-
-  /**
-   * Delete a tag mapping (for testing/admin)
-   */
-  async deleteTag(tag: string): Promise<boolean> {
-    try {
-      const validation = this.validateTag(tag);
-      if (!validation.isValid || !validation.normalizedTag) {
-        return false;
-      }
-
-      tagStorage.delete(`${this.TAG_PREFIX}${validation.normalizedTag}`);
-      return true;
-    } catch (error) {
+      console.error('Failed to check tag availability:', error);
+      // Return false on error to prevent duplicate registrations
       return false;
     }
   }
 
   /**
-   * Clear all tags (for testing)
+   * Search for tags (for future autocomplete)
    */
-  clearAllTags(): void {
-    const keys = tagStorage.getAllKeys();
-    keys
-      .filter(key => key.startsWith(this.TAG_PREFIX))
-      .forEach(key => tagStorage.delete(key));
+  async searchTags(query: string, limit: number = 10): Promise<string[]> {
+    try {
+      const profiles = await userProfileService.searchProfiles(query, limit);
+      return profiles.map(profile => `@${profile.tag}`);
+    } catch (error) {
+      console.error('Failed to search tags:', error);
+      return [];
+    }
   }
 
   /**
-   * Seed with demo tags (for development)
+   * Placeholder for demo tags (no longer needed with database)
    */
   async seedDemoTags(): Promise<void> {
-    const demoTags = [
-      { tag: 'alice', address: '0x742d35Cc6634C0532925a3b844Bc9e7595f89590' },
-      { tag: 'bob', address: '0x5aAeb6053f3E94C9b9A09f33669435E7Ef1BeAed' },
-      { tag: 'charlie', address: '0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359' },
-      { tag: 'demo', address: '0x742d35Cc6634C0532925a3b8D37AAb63e6f3Cd55' },
-    ];
-
-    for (const { tag, address } of demoTags) {
-      await this.registerTag(tag, address);
-    }
+    // No longer needed - tags are stored in database
+    console.log('Demo tags are now managed through the database');
   }
 }
 

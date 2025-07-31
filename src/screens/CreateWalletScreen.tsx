@@ -138,14 +138,32 @@ const CreateWalletScreen: React.FC<Props> = ({ navigation, route }) => {
           } else {
             console.warn('⚠️ User profile creation returned null');
           }
-        } catch (profileError) {
+        } catch (profileError: any) {
           console.error('❌ User profile creation failed:', profileError);
-          // Show a warning but don't fail the entire flow
-          Alert.alert(
-            'Profile Creation Failed',
-            'Your wallet was created successfully, but we couldn\'t create your user profile. You can try again later.',
-            [{ text: 'OK' }]
-          );
+          
+          // Handle specific error cases
+          if (profileError.message === 'ETHEREUM_ADDRESS_ALREADY_REGISTERED') {
+            Alert.alert(
+              'Wallet Already Registered',
+              'This wallet address is already associated with another BlirpMe account. This is an unexpected error. Please try again or contact support.',
+              [{ text: 'OK' }]
+            );
+            return; // Stop the flow here
+          } else if (profileError.message === 'TAG_ALREADY_TAKEN') {
+            Alert.alert(
+              'Tag Already Taken',
+              `The tag "@${tag}" was just taken by another user. Please choose a different tag.`,
+              [{ text: 'OK' }]
+            );
+            return; // Stop the flow here
+          } else {
+            // Generic error
+            Alert.alert(
+              'Profile Creation Failed',
+              'Your wallet was created successfully, but we couldn\'t create your user profile. You can try again later.',
+              [{ text: 'OK' }]
+            );
+          }
         }
       } else {
         console.log('⚠️ Missing data for profile creation:', {

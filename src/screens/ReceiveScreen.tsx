@@ -37,10 +37,8 @@ const ReceiveScreen: React.FC<Props> = () => {
   const hasTag = Boolean(walletTag && walletTag.trim());
   const hasAddress = Boolean(walletAddress);
   
-  // Set initial display mode based on available data
-  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>(
-    hasTag ? 'tag' : 'address'
-  );
+  // State for showing address in testing mode
+  const [showAddress, setShowAddress] = useState(false);
 
   // Toast state
   const [toast, setToast] = useState<{
@@ -60,7 +58,8 @@ const ReceiveScreen: React.FC<Props> = () => {
   const address = walletAddress || '';
   const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
 
-  const displayValue = displayMode === 'tag' ? tag : address;
+  // Always display tag (or message if no tag)
+  const displayValue = hasTag ? tag : '';
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, message, type });
@@ -71,9 +70,9 @@ const ReceiveScreen: React.FC<Props> = () => {
   };
 
   const handleCopy = async () => {
-    if (!displayValue) {
+    if (!hasTag) {
       HapticFeedback.notificationError();
-      showToast('No address to copy', 'error');
+      showToast('No username to copy', 'error');
       return;
     }
     
@@ -82,12 +81,9 @@ const ReceiveScreen: React.FC<Props> = () => {
     setTimeout(() => setCopyButtonPressed(false), 150);
     
     try {
-      await Clipboard.setString(displayValue);
+      await Clipboard.setString(tag);
       HapticFeedback.impact();
-      const shortValue = displayValue.length > 20 
-        ? `${displayValue.slice(0, 10)}...${displayValue.slice(-8)}`
-        : displayValue;
-      showToast(`✓ Copied ${shortValue}`);
+      showToast(`✓ Copied ${tag}`);
     } catch (error) {
       HapticFeedback.notificationError();
       showToast('Failed to copy to clipboard', 'error');
@@ -95,32 +91,28 @@ const ReceiveScreen: React.FC<Props> = () => {
   };
 
   const shareAsText = async () => {
-    const shareMessage = displayMode === 'tag' && hasTag
-      ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
-      : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
+    const shareMessage = `💎 Send crypto to my BlirpMe wallet!\n\n${tag}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`;
     
     await Share.share({ message: shareMessage });
   };
 
   const shareAsPaymentLink = async () => {
-    // Create ethereum: URI for payment requests
-    const paymentUri = `ethereum:${address}`;
-    const message = displayMode === 'tag' && hasTag
-      ? `💎 Pay me using BlirpMe: ${displayValue}\n\nPayment Link: ${paymentUri}\n\nDownload BlirpMe: https://blirpme.com`
-      : `💰 ETH Payment Request\n\nAddress: ${displayValue}\nPayment Link: ${paymentUri}\n\n📱 Powered by BlirpMe`;
+    // Create BlirpMe payment link
+    const paymentLink = `https://blirpme.com/pay/${tag.slice(1)}`; // Remove @ from tag
+    const message = `💎 Pay me using BlirpMe: ${tag}\n\nPayment Link: ${paymentLink}\n\nDownload BlirpMe: https://blirpme.com`;
     
     await Share.share({ message });
   };
 
-  const shareAddressOnly = async () => {
-    // Share just the address/tag without extra formatting
-    await Share.share({ message: displayValue });
+  const shareUsernameOnly = async () => {
+    // Share just the username without extra formatting
+    await Share.share({ message: tag });
   };
 
   const handleShare = async () => {
-    if (!displayValue) {
+    if (!hasTag) {
       HapticFeedback.notificationError();
-      Alert.alert('Error', 'No address to share');
+      Alert.alert('No Username', 'Please set a username in your profile to share');
       return;
     }
 
@@ -132,7 +124,7 @@ const ReceiveScreen: React.FC<Props> = () => {
             'Cancel',
             '📄 Share as Text',
             '🔗 Share Payment Link',
-            '📋 Share Address Only',
+            '📋 Share Username Only',
           ],
           cancelButtonIndex: 0,
           title: 'Share Options',
@@ -148,7 +140,7 @@ const ReceiveScreen: React.FC<Props> = () => {
                 await shareAsPaymentLink();
                 break;
               case 3:
-                await shareAddressOnly();
+                await shareUsernameOnly();
                 break;
               default:
                 return;
@@ -192,10 +184,10 @@ const ReceiveScreen: React.FC<Props> = () => {
             },
           },
           {
-            text: '📋 Address Only',
+            text: '📋 Username Only',
             onPress: async () => {
               try {
-                await shareAddressOnly();
+                await shareUsernameOnly();
                 HapticFeedback.impact();
               } catch (error) {
                 HapticFeedback.notificationError();
@@ -223,59 +215,30 @@ const ReceiveScreen: React.FC<Props> = () => {
       {/* QR Code Section */}
       <View style={styles.qrSection}>
         <View style={styles.qrContainer}>
-          {hasAddress ? (
+          {hasTag ? (
             <QRCode
-              value={displayMode === 'tag' && hasTag ? tag : address}
+              value={`blirpme:${tag}`}
               size={200}
               backgroundColor={theme.colors.background}
               color={theme.colors.text.primary}
             />
           ) : (
             <View style={styles.qrPlaceholder}>
-              <Text style={styles.qrPlaceholderText}>Loading...</Text>
+              <Icon 
+                name="qr-code-outline" 
+                size={80} 
+                color={theme.colors.text.tertiary} 
+              />
+              <Text style={styles.qrPlaceholderText}>Set a username to generate QR code</Text>
             </View>
           )}
         </View>
-
-        {/* Toggle Buttons - Only show if user has both tag and address */}
-        {hasTag && hasAddress && (
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                displayMode === 'tag' && styles.toggleButtonActive,
-              ]}
-              onPress={() => setDisplayMode('tag')}
-            >
-              <Text style={[
-                styles.toggleButtonText,
-                displayMode === 'tag' && styles.toggleButtonTextActive,
-              ]}>
-                Tag
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                displayMode === 'address' && styles.toggleButtonActive,
-              ]}
-              onPress={() => setDisplayMode('address')}
-            >
-              <Text style={[
-                styles.toggleButtonText,
-                displayMode === 'address' && styles.toggleButtonTextActive,
-              ]}>
-                Address
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
 
-      {/* Address/Tag Display */}
+      {/* Username Display */}
       <View style={styles.addressSection}>
         <Text style={styles.addressLabel}>
-          {displayMode === 'tag' ? 'Your Tag' : 'Your Address'}
+          Your Username
         </Text>
         <View style={styles.addressContainer}>
           <Text 
@@ -283,14 +246,14 @@ const ReceiveScreen: React.FC<Props> = () => {
               styles.addressText,
               !displayValue && styles.addressTextPlaceholder
             ]} 
-            numberOfLines={displayMode === 'address' ? 2 : 1}
+            numberOfLines={1}
           >
-            {displayValue || (displayMode === 'tag' ? 'No tag set' : 'Loading address...')}
+            {displayValue || 'No username set'}
           </Text>
         </View>
-        {displayMode === 'tag' && !hasTag && hasAddress && (
+        {!hasTag && (
           <Text style={styles.noTagHint}>
-            You haven't set a tag yet. Use your address to receive funds.
+            Set a username in your profile to receive payments.
           </Text>
         )}
       </View>
@@ -300,26 +263,33 @@ const ReceiveScreen: React.FC<Props> = () => {
         <TouchableOpacity 
           style={[
             styles.actionButton,
-            copyButtonPressed && styles.actionButtonPressed
+            copyButtonPressed && styles.actionButtonPressed,
+            !hasTag && styles.actionButtonDisabled
           ]} 
           onPress={handleCopy}
+          disabled={!hasTag}
         >
           <Icon 
             name={copyButtonPressed ? "checkmark-outline" : "copy-outline"} 
             size={24} 
-            color={copyButtonPressed ? theme.colors.surface : theme.colors.primary} 
+            color={!hasTag ? theme.colors.text.tertiary : (copyButtonPressed ? theme.colors.surface : theme.colors.primary)} 
           />
           <Text style={[
             styles.actionButtonText,
-            copyButtonPressed && styles.actionButtonTextPressed
+            copyButtonPressed && styles.actionButtonTextPressed,
+            !hasTag && styles.actionButtonTextDisabled
           ]}>
             {copyButtonPressed ? 'Copied!' : 'Copy'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-          <Icon name="share-outline" size={24} color={theme.colors.primary} />
-          <Text style={styles.actionButtonText}>Share</Text>
+        <TouchableOpacity 
+          style={[styles.actionButton, !hasTag && styles.actionButtonDisabled]} 
+          onPress={handleShare}
+          disabled={!hasTag}
+        >
+          <Icon name="share-outline" size={24} color={!hasTag ? theme.colors.text.tertiary : theme.colors.primary} />
+          <Text style={[styles.actionButtonText, !hasTag && styles.actionButtonTextDisabled]}>Share</Text>
         </TouchableOpacity>
       </View>
 
@@ -331,10 +301,47 @@ const ReceiveScreen: React.FC<Props> = () => {
         </Text>
       </View>
 
-      {/* Network Badge */}
-      <View style={styles.networkBadge}>
-        <Text style={styles.networkBadgeText}>Ethereum Mainnet</Text>
-      </View>
+      {/* Testing Button - Show Address */}
+      {hasAddress && (
+        <TouchableOpacity 
+          style={styles.testingButton} 
+          onPress={() => {
+            setShowAddress(!showAddress);
+            if (!showAddress) {
+              // Auto-hide after 10 seconds
+              setTimeout(() => setShowAddress(false), 10000);
+            }
+          }}
+        >
+          <Icon 
+            name={showAddress ? "eye-off-outline" : "eye-outline"} 
+            size={16} 
+            color={theme.colors.text.secondary} 
+          />
+          <Text style={styles.testingButtonText}>
+            {showAddress ? 'Hide Address' : 'Show Address (Testing)'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      
+      {/* Address Display for Testing */}
+      {showAddress && hasAddress && (
+        <View style={styles.testingAddressContainer}>
+          <Text style={styles.testingAddressLabel}>Wallet Address:</Text>
+          <Text style={styles.testingAddressText}>{address}</Text>
+          <TouchableOpacity 
+            onPress={async () => {
+              await Clipboard.setString(address);
+              HapticFeedback.impact();
+              showToast('Address copied');
+            }}
+            style={styles.testingCopyButton}
+          >
+            <Icon name="copy-outline" size={14} color={theme.colors.primary} />
+            <Text style={styles.testingCopyText}>Copy</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       </ScrollView>
     </View>
   );
@@ -456,10 +463,13 @@ const styles = StyleSheet.create({
     height: 200,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: theme.spacing.md,
   },
   qrPlaceholderText: {
-    ...theme.typography.body,
-    color: theme.colors.text.secondary,
+    ...theme.typography.caption1,
+    color: theme.colors.text.tertiary,
+    textAlign: 'center',
+    maxWidth: 160,
   },
   addressTextPlaceholder: {
     fontStyle: 'italic',
@@ -477,6 +487,54 @@ const styles = StyleSheet.create({
   },
   actionButtonTextPressed: {
     color: theme.colors.surface,
+  },
+  actionButtonDisabled: {
+    backgroundColor: theme.colors.neutral[100],
+  },
+  actionButtonTextDisabled: {
+    color: theme.colors.text.tertiary,
+  },
+  testingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.full,
+    gap: theme.spacing.xs,
+  },
+  testingButtonText: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.secondary,
+    fontWeight: '600',
+  },
+  testingAddressContainer: {
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    marginTop: theme.spacing.md,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  testingAddressLabel: {
+    ...theme.typography.caption2,
+    color: theme.colors.text.secondary,
+  },
+  testingAddressText: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.primary,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    textAlign: 'center',
+  },
+  testingCopyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  testingCopyText: {
+    ...theme.typography.caption2,
+    color: theme.colors.primary,
   },
 });
 

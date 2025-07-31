@@ -47,12 +47,30 @@ class UserProfileService {
 
       if (error) {
         console.error('Error creating user profile:', error);
+        
+        // Check for specific constraint violations
+        if (error.code === '23505') { // Unique violation error code
+          if (error.message.includes('ethereum_address')) {
+            throw new Error('ETHEREUM_ADDRESS_ALREADY_REGISTERED');
+          } else if (error.message.includes('tag')) {
+            throw new Error('TAG_ALREADY_TAKEN');
+          }
+        }
+        
         throw error;
       }
 
       return data as UserProfile;
     } catch (error) {
       console.error('Failed to create user profile:', error);
+      
+      // Re-throw specific errors for handling in the UI
+      if (error instanceof Error && 
+          (error.message === 'ETHEREUM_ADDRESS_ALREADY_REGISTERED' ||
+           error.message === 'TAG_ALREADY_TAKEN')) {
+        throw error;
+      }
+      
       return null;
     }
   }
