@@ -86,3 +86,9 @@ export const getAlchemyUrl = (chainId: SupportedChainId, apiKey: string): string
 // Default chain configuration
 export const DEFAULT_CHAIN_ID = CHAIN_IDS.BASE;
 export const DEFAULT_ENABLED_CHAINS = [CHAIN_IDS.BASE];
+
+// Chain names for display
+export const CHAIN_NAMES: Record<SupportedChainId, string> = {
+  [CHAIN_IDS.ETHEREUM]: 'Ethereum',
+  [CHAIN_IDS.BASE]: 'Base',
+};

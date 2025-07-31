@@ -36,7 +36,7 @@ const SettingsScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Networks</Text>
           <Text style={styles.sectionDescription}>
-            Choose which blockchain networks to show in your wallet
+            Select the blockchain network for your wallet
           </Text>
 
           {/* Base Network */}
@@ -96,7 +96,7 @@ const SettingsScreen: React.FC = () => {
           <View style={styles.note}>
             <Icon name="information-circle-outline" size={20} color={theme.colors.text.secondary} />
             <Text style={styles.noteText}>
-              At least one network must be enabled
+              Only one network can be active at a time
             </Text>
           </View>
         </View>

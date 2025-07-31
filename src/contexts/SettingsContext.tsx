@@ -74,16 +74,12 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   };
 
   const toggleChain = (chainId: SupportedChainId) => {
-    if (isChainEnabled(chainId)) {
-      // Don't allow disabling all chains
-      if (enabledChains.length > 1) {
-        const newChains = enabledChains.filter(id => id !== chainId);
-        setEnabledChains(newChains);
-      }
-    } else {
-      const newChains = [...enabledChains, chainId];
-      setEnabledChains(newChains);
+    // Only allow one chain at a time
+    if (!isChainEnabled(chainId)) {
+      // Enable this chain and disable all others
+      setEnabledChains([chainId]);
     }
+    // If the chain is already enabled, do nothing (can't disable the only enabled chain)
   };
 
   return (

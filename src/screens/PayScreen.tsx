@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
@@ -25,7 +26,11 @@ import {
 import { getEthBalance, getEthPrice } from '../services/balance';
 import tagService from '../services/tagService';
 import { useWallet } from '../contexts/WalletContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { getAddress } from 'viem';
+import { getBalance } from '@wagmi/core';
+import { config } from '../config/wagmi';
+import { SupportedChainId, CHAIN_NAMES } from '../config/chains';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -38,6 +43,7 @@ type Props = {
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress: contextWalletAddress } = useWallet();
+  const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -48,6 +54,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   // Real blockchain data
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
+  const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(1);
   const walletAddress = contextWalletAddress || '';
   
   // Transaction simulation state
@@ -57,6 +64,17 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   
   // Transaction execution state
   const [isExecuting, setIsExecuting] = useState(false);
+
+  // Set current chain based on enabled chains
+  useEffect(() => {
+    if (enabledChains.length > 0) {
+      // Use the first enabled chain as the current chain
+      setCurrentChainId(enabledChains[0]);
+    } else {
+      // Default to Ethereum mainnet if no chains are enabled
+      setCurrentChainId(1);
+    }
+  }, [enabledChains]);
 
   // Load wallet data on component mount
   useEffect(() => {
@@ -69,13 +87,16 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           return;
         }
         
-        // Load balance and ETH price
-        const [balanceResult, priceResult] = await Promise.all([
-          getEthBalance(walletAddress),
-          getEthPrice(),
-        ]);
+        // Get balance from the current chain
+        const balanceResult = await getBalance(config, {
+          address: walletAddress as `0x${string}`,
+          chainId: currentChainId
+        });
         
-        setBalance(parseFloat(balanceResult));
+        // Load ETH price
+        const priceResult = await getEthPrice();
+        
+        setBalance(parseFloat(formatEther(balanceResult.value)));
         setEthPrice(priceResult);
       } catch (error) {
         console.error('Failed to load wallet data:', error);
@@ -87,7 +108,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     
     // Seed demo tags for testing
     tagService.seedDemoTags();
-  }, [walletAddress]);
+  }, [walletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
   const simulateTransactionDebounced = useCallback(
@@ -102,6 +123,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           from: walletAddress,
           to: recipientAddr,
           value: amountWei,
+          chainId: currentChainId,
         });
         
         setSimulation(result);
@@ -119,7 +141,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         setIsSimulating(false);
       }
     },
-    [walletAddress, ethPrice]
+    [walletAddress, ethPrice, currentChainId]
   );
 
   useEffect(() => {
@@ -220,6 +242,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
 
     const confirmMessage = `
 Send ${amount} ETH to ${recipient}
+Network: ${CHAIN_NAMES[currentChainId] || 'Unknown'}
 
 Network Fee: ~${parseFloat(gasEth).toFixed(6)} ETH (~$${gasEstimateUSD})
 Total: ${(parseFloat(amount) + parseFloat(gasEth)).toFixed(6)} ETH
@@ -259,12 +282,13 @@ This action requires biometric authentication.`;
         from: walletAddress,
         to: resolvedAddress || recipient,
         value: amountWei,
+        chainId: currentChainId,
       });
 
       // Success
       Alert.alert(
         'Transaction Sent!',
-        `Transaction Hash: ${result.transactionHash}\n\nYour transaction is being processed by the network.`,
+        `Transaction Hash: ${result.transactionHash}\n\nYour transaction is being processed on ${CHAIN_NAMES[currentChainId] || 'the network'}.`,
         [
           {
             text: 'View Home',
@@ -300,18 +324,21 @@ This action requires biometric authentication.`;
   const balanceUSD = balance * ethPrice;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
         {/* Balance Display */}
         <View style={styles.balanceSection}>
-          <Text style={styles.balanceLabel}>Available Balance</Text>
+          <Text style={styles.balanceLabel}>
+            Available Balance {enabledChains.length > 0 && CHAIN_NAMES[currentChainId] ? `(${CHAIN_NAMES[currentChainId]})` : ''}
+          </Text>
           <Text style={styles.balanceAmount}>
             {walletAddress ? balance.toFixed(4) : '0.0000'} ETH
             {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
@@ -460,7 +487,8 @@ This action requires biometric authentication.`;
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
@@ -626,6 +654,42 @@ const styles = StyleSheet.create({
     color: theme.colors.text.tertiary,
     marginTop: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
+  },
+  networkSelector: {
+    paddingTop: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
+  },
+  networkLabel: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.tertiary,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  networkButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+  },
+  networkButton: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  networkButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  networkButtonText: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+    fontWeight: '500',
+  },
+  networkButtonTextActive: {
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
   },
 });
 

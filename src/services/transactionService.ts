@@ -100,9 +100,9 @@ export const getCurrentGasPrices = async (chainId?: SupportedChainId): Promise<{
     let baseFeeMultiplier: bigint;
     
     if (chainId === 8453) { // Base chain
-      // Base has very low gas prices, use minimal values
-      maxPriorityFeePerGas = parseGwei('0.001').toString(); // 0.001 gwei
-      baseFeeMultiplier = 11n; // 1.1x multiplier
+      // Base has very low gas prices, but be slightly more conservative
+      maxPriorityFeePerGas = parseGwei('0.01').toString(); // 0.01 gwei (increased from 0.001)
+      baseFeeMultiplier = 12n; // 1.2x multiplier (increased from 1.1x)
     } else { // Ethereum mainnet and others
       // Standard values for mainnet
       maxPriorityFeePerGas = parseGwei('1').toString(); // 1 gwei
@@ -130,7 +130,7 @@ export const getCurrentGasPrices = async (chainId?: SupportedChainId): Promise<{
     if (chainId === 8453) { // Base chain
       return {
         maxFeePerGas: parseGwei('0.1').toString(), // 0.1 gwei for Base
-        maxPriorityFeePerGas: parseGwei('0.001').toString(),
+        maxPriorityFeePerGas: parseGwei('0.01').toString(), // Increased from 0.001
         gasPrice: parseGwei('0.1').toString()
       };
     } else {

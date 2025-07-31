@@ -204,7 +204,7 @@ export const executeManualTrade = async (
     // Use routeId from the route object
     const manualRouteId = route.routeId || routeId;
     console.log('Manual route ID for build-tx:', manualRouteId);
-    const buildResult = await buildManualTransaction(manualRouteId);
+    let buildResult = await buildManualTransaction(manualRouteId);
     
     // Step 2: Check if approval is needed from the build-tx response
     if (buildResult.approvalData) {
@@ -217,8 +217,20 @@ export const executeManualTrade = async (
         userAddress: userAddress,
         spenderAddress: buildResult.approvalData.spenderAddress,
         amount: buildResult.approvalData.amount,
-        amountWei: amountWei
+        amountWei: amountWei,
+        chainId: params.fromToken.chainId
       });
+      
+      // Check current allowance before proceeding
+      const initialAllowance = await checkTokenAllowance(
+        buildResult.approvalData.tokenAddress as `0x${string}`,
+        userAddress as `0x${string}`,
+        buildResult.approvalData.spenderAddress as `0x${string}`,
+        BigInt(buildResult.approvalData.amount),
+        params.fromToken.chainId
+      );
+      
+      console.log('Initial allowance check:', initialAllowance ? 'Has allowance' : 'No allowance');
       
       const approvalNeeded = await needsApproval(
         buildResult.approvalData.tokenAddress as `0x${string}`,
@@ -306,7 +318,75 @@ export const executeManualTrade = async (
           setExecutionStatus?.('Waiting for approval confirmation...');
           await waitForTransaction(approvalHash, 1, params.fromToken.chainId);
           
-          console.log('✅ Token approved');
+          console.log('✅ Token approved, waiting for state propagation...');
+          
+          // Add a longer delay to ensure the approval is propagated on Base
+          const delayMs = params.fromToken.chainId === 8453 ? 3000 : 2000; // 3s for Base, 2s for others
+          console.log(`⏳ Waiting ${delayMs}ms for approval propagation on chain ${params.fromToken.chainId}...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          
+          // Verify the approval was successful
+          console.log('🔍 Verifying approval with params:', {
+            tokenAddress: fromToken.address,
+            userAddress: userAddress,
+            spenderAddress: buildResult.approvalData.spenderAddress,
+            requiredAmount: params.amountWei,
+            chainId: fromToken.chainId
+          });
+          
+          const approvalVerified = await checkTokenAllowance(
+            fromToken.address,
+            userAddress,
+            buildResult.approvalData.spenderAddress as `0x${string}`,
+            params.amountWei,
+            fromToken.chainId
+          );
+          
+          if (!approvalVerified) {
+            console.error('❌ Approval verification failed after confirmation');
+            // Double-check the exact allowance amount
+            const publicClient = getPublicClient(config, { chainId: params.fromToken.chainId || 1 });
+            if (publicClient) {
+              try {
+                const currentAllowance = await publicClient.readContract({
+                  address: fromToken.address as `0x${string}`,
+                  abi: [{
+                    inputs: [
+                      { name: "owner", type: "address" },
+                      { name: "spender", type: "address" },
+                    ],
+                    name: "allowance",
+                    outputs: [{ name: "", type: "uint256" }],
+                    stateMutability: "view",
+                    type: "function",
+                  }],
+                  functionName: "allowance",
+                  args: [userAddress as `0x${string}`, buildResult.approvalData.spenderAddress as `0x${string}`],
+                }) as bigint;
+                
+                console.error('Current allowance:', currentAllowance.toString(), 'Required:', params.amountWei);
+              } catch (error) {
+                console.error('Failed to check exact allowance:', error);
+              }
+            }
+            throw new Error('Token approval failed to propagate. Please try again.');
+          }
+          
+          console.log('✅ Token approval verified successfully');
+          
+          // After approval, we need to rebuild the transaction to get fresh data
+          console.log('🔄 Rebuilding transaction after approval...');
+          setExecutionStatus?.('Preparing transaction after approval...');
+          
+          // Small additional delay before rebuilding
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Rebuild the transaction with the same route ID
+          const freshBuildResult = await buildManualTransaction(manualRouteId);
+          
+          // Update buildResult with fresh data
+          buildResult = freshBuildResult;
+          console.log('✅ Transaction rebuilt with fresh data');
         }
       }
     }
@@ -319,7 +399,9 @@ export const executeManualTrade = async (
       value: txData.value,
       hasData: !!txData.data,
       dataLength: txData.data?.length,
-      gasLimit: txData.gasLimit
+      gasLimit: txData.gasLimit,
+      approvalSpender: buildResult.approvalData?.spenderAddress,
+      approvalToken: buildResult.approvalData?.tokenAddress
     });
     
     // Step 3: Sign and send the transaction
@@ -351,12 +433,26 @@ export const executeManualTrade = async (
           simulation.error?.includes('insufficient allowance') ||
           simulation.error?.includes('insufficient balance')) {
         console.error('❌ Critical simulation error:', simulation.error);
-        setExecutionStatus?.('Transaction simulation failed. Please check your token approval and balance.');
+        
+        // Check current allowance to provide better error message
+        const currentAllowance = await checkTokenAllowance(
+          buildResult.approvalData?.tokenAddress || params.fromToken.address,
+          params.userAddress,
+          buildResult.approvalData?.spenderAddress || txData.to,
+          params.amountWei,
+          params.fromToken.chainId
+        );
+        
+        if (!currentAllowance) {
+          setExecutionStatus?.('Token approval missing or insufficient. Please try again.');
+        } else {
+          setExecutionStatus?.('Transaction simulation failed. Please check your token balance.');
+        }
         
         return {
           transactionHash: '',
           status: 'failed',
-          error: `Simulation failed: ${simulation.error}`
+          error: `Simulation failed: ${simulation.error}. Allowance check: ${currentAllowance ? 'OK' : 'FAILED'}`
         };
       }
       
@@ -505,7 +601,26 @@ export const executeTrade = async (
           chainId: fromToken.chainId
         });
         
-        console.log('✅ Token approved for Bungee contract');
+        console.log('✅ Token approved for Bungee contract, waiting for state propagation...');
+        
+        // Add a small delay to ensure the approval is propagated
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Verify the approval was successful
+        const approvalVerified = await checkTokenAllowance(
+          fromToken.address,
+          userAddress,
+          actualSpenderAddress,
+          params.amountWei,
+          fromToken.chainId
+        );
+        
+        if (!approvalVerified) {
+          console.error('❌ Approval verification failed after confirmation');
+          throw new Error('Token approval failed to propagate. Please try again.');
+        }
+        
+        console.log('✅ Token approval verified');
       }
       
       // Step 2: Build the transaction to get signature data
