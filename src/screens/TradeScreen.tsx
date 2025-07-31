@@ -24,7 +24,11 @@ import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWi
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
 import { estimateTradeGas, TradeGasEstimate } from '../services/tradeGasEstimation';
+import { checkTokenAllowance } from '../services/tradeExecutionService';
 import { parseEther, parseUnits } from 'viem';
+
+// Bungee contract address for approval checks
+const BUNGEE_CONTRACT = '0x3a23F943181408EAC424116Af7b7790c94Cb97a5';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
@@ -58,6 +62,15 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const [gasEstimate, setGasEstimate] = useState<TradeGasEstimate | null>(null);
   const [isEstimatingGas, setIsEstimatingGas] = useState(false);
   const [isMaxAmount, setIsMaxAmount] = useState(false);
+  const [approvalStatus, setApprovalStatus] = useState<{
+    isChecking: boolean;
+    hasApproval: boolean;
+    requiredAmount: string;
+  }>({
+    isChecking: false,
+    hasApproval: true, // Default to true (ETH doesn't need approval)
+    requiredAmount: '0'
+  });
   
   // Load tokens and prices
   useEffect(() => {
@@ -115,6 +128,59 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
       updateGasEstimate();
     }
   }, [selectedToken, tradeMode, ethPrice, enabledChains]);
+
+  // Check token approval when selling tokens
+  useEffect(() => {
+    const checkApproval = async () => {
+      if (!selectedToken || !walletAddress || !amountUSD) {
+        return;
+      }
+
+      // Only need approval when selling non-native tokens
+      if (tradeMode === 'sell' && !selectedToken.isNative) {
+        setApprovalStatus(prev => ({ ...prev, isChecking: true }));
+        
+        try {
+          // Convert USD amount to token amount
+          const tokenAmount = parseFloat(amountUSD) / (selectedToken.priceUSD || 1);
+          const amountWei = parseUnits(tokenAmount.toString(), selectedToken.decimals).toString();
+          
+          // Use the first enabled chain or default to mainnet
+          const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
+          
+          const hasApproval = await checkTokenAllowance(
+            selectedToken.address,
+            walletAddress,
+            BUNGEE_CONTRACT,
+            amountWei,
+            currentChainId
+          );
+          
+          setApprovalStatus({
+            isChecking: false,
+            hasApproval,
+            requiredAmount: amountWei
+          });
+        } catch (error) {
+          console.error('Failed to check approval:', error);
+          setApprovalStatus({
+            isChecking: false,
+            hasApproval: false,
+            requiredAmount: '0'
+          });
+        }
+      } else {
+        // Reset to default for ETH or buy mode
+        setApprovalStatus({
+          isChecking: false,
+          hasApproval: true,
+          requiredAmount: '0'
+        });
+      }
+    };
+
+    checkApproval();
+  }, [selectedToken, walletAddress, amountUSD, tradeMode, enabledChains]);
   
   const updateGasEstimate = async () => {
     if (!selectedToken) return;
@@ -128,7 +194,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         tradeMode,
         selectedToken,
         ethPrice,
-        false, // We don't have approval checking yet
+        approvalStatus.hasApproval, // Pass current approval status
         currentChainId
       );
       setGasEstimate(estimate);
@@ -469,10 +535,27 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
             
-            {gasEstimate?.requiresApproval && (
+            {/* Show approval status for token sells */}
+            {tradeMode === 'sell' && !selectedToken?.isNative && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Token Approval</Text>
-                <Text style={styles.detailValueSubtext}>Required</Text>
+                {approvalStatus.isChecking ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : approvalStatus.hasApproval ? (
+                  <View style={styles.approvalStatus}>
+                    <Icon name="checkmark-circle" size={16} color={theme.colors.success} />
+                    <Text style={[styles.detailValueSubtext, { color: theme.colors.success }]}>
+                      Approved
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.approvalStatus}>
+                    <Icon name="alert-circle" size={16} color={theme.colors.warning} />
+                    <Text style={[styles.detailValueSubtext, { color: theme.colors.warning }]}>
+                      Approval needed
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
             
@@ -727,6 +810,11 @@ const styles = StyleSheet.create({
   detailValueSubtext: {
     ...theme.typography.caption1,
     color: theme.colors.text.tertiary,
+  },
+  approvalStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   reviewButton: {
     backgroundColor: theme.colors.primary,
