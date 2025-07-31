@@ -42,7 +42,7 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
-  const { walletAddress: contextWalletAddress } = useWallet();
+  const { wallet } = useWallet();
   const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
@@ -57,7 +57,18 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
   const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(1);
-  const walletAddress = contextWalletAddress || '';
+  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
+  const walletAddress = wallet?.address || '';
+  
+  // Debug wallet state
+  useEffect(() => {
+    console.log('PayScreen - Wallet state:', {
+      wallet,
+      walletAddress,
+      hasWallet: !!wallet,
+      hasAddress: !!walletAddress
+    });
+  }, [wallet, walletAddress]);
   
   // Transaction simulation state
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
@@ -82,12 +93,14 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const loadWalletData = async () => {
       try {
+        setIsLoadingBalance(true);
+        
         if (!walletAddress) {
-          // No wallet address available
-          console.error('No wallet address available');
-          Alert.alert('Error', 'Please sign in to your wallet first');
+          console.log('No wallet address available yet');
           return;
         }
+        
+        console.log('Loading balance for address:', walletAddress, 'on chain:', currentChainId);
         
         // Get balance from the current chain
         const balanceResult = await getBalance(config, {
@@ -95,20 +108,35 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           chainId: currentChainId
         });
         
+        console.log('Balance result:', balanceResult);
+        
         // Load ETH price
         const priceResult = await getEthPrice();
+        console.log('ETH price:', priceResult);
         
-        setBalance(parseFloat(formatEther(balanceResult.value)));
+        const balanceInEth = parseFloat(formatEther(balanceResult.value));
+        setBalance(balanceInEth);
         setEthPrice(priceResult);
+        
+        console.log('Balance set to:', balanceInEth, 'ETH');
       } catch (error) {
         console.error('Failed to load wallet data:', error);
-        Alert.alert('Error', 'Failed to load wallet data');
+        // Don't show alert for initial load failures
+      } finally {
+        setIsLoadingBalance(false);
       }
     };
 
     loadWalletData();
     
-    // Tags are now managed through the database
+    // Set up periodic refresh every 30 seconds
+    const intervalId = setInterval(() => {
+      if (walletAddress) {
+        loadWalletData();
+      }
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
   }, [walletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
@@ -374,11 +402,19 @@ This action requires biometric authentication.`;
           <Text style={styles.balanceLabel}>
             Available Balance {enabledChains.length > 0 && CHAIN_NAMES[currentChainId] ? `(${CHAIN_NAMES[currentChainId]})` : ''}
           </Text>
-          <Text style={styles.balanceAmount}>
-            ${walletAddress ? balanceUSD.toFixed(2) : '0.00'}
-            {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
-          </Text>
-          <Text style={styles.balanceETH}>{walletAddress ? balance.toFixed(4) : '0.0000'} ETH</Text>
+          {isLoadingBalance ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Text style={styles.loadingText}>Loading balance...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.balanceAmount}>
+                ${balanceUSD.toFixed(2)}
+              </Text>
+              <Text style={styles.balanceETH}>{balance.toFixed(4)} ETH</Text>
+            </>
+          )}
         </View>
 
         {/* Recipient Input */}
@@ -776,6 +812,16 @@ const styles = StyleSheet.create({
   networkButtonTextActive: {
     color: theme.colors.text.inverse,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  loadingText: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
   },
 });
 

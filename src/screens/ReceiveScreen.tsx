@@ -56,10 +56,11 @@ const ReceiveScreen: React.FC<Props> = () => {
 
   // Use real wallet data from context with defensive checks
   const address = walletAddress || '';
-  const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
+  const tag = walletTag?.trim() || '';
+  const tagWithAt = tag ? `@${tag}` : '';
 
   // Always display tag (or message if no tag)
-  const displayValue = hasTag ? tag : '';
+  const displayValue = tag;
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, message, type });
@@ -81,9 +82,9 @@ const ReceiveScreen: React.FC<Props> = () => {
     setTimeout(() => setCopyButtonPressed(false), 150);
     
     try {
-      await Clipboard.setString(tag);
+      await Clipboard.setString(tagWithAt);
       HapticFeedback.impact();
-      showToast(`✓ Copied ${tag}`);
+      showToast(`✓ Copied ${tagWithAt}`);
     } catch (error) {
       HapticFeedback.notificationError();
       showToast('Failed to copy to clipboard', 'error');
@@ -91,22 +92,22 @@ const ReceiveScreen: React.FC<Props> = () => {
   };
 
   const shareAsText = async () => {
-    const shareMessage = `💎 Send crypto to my BlirpMe wallet!\n\n${tag}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`;
+    const shareMessage = `💎 Send crypto to my BlirpMe wallet!\n\n${tagWithAt}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`;
     
     await Share.share({ message: shareMessage });
   };
 
   const shareAsPaymentLink = async () => {
     // Create BlirpMe payment link
-    const paymentLink = `https://blirpme.com/pay/${tag.slice(1)}`; // Remove @ from tag
-    const message = `💎 Pay me using BlirpMe: ${tag}\n\nPayment Link: ${paymentLink}\n\nDownload BlirpMe: https://blirpme.com`;
+    const paymentLink = `https://blirpme.com/pay/${tag}`;
+    const message = `💎 Pay me using BlirpMe: ${tagWithAt}\n\nPayment Link: ${paymentLink}\n\nDownload BlirpMe: https://blirpme.com`;
     
     await Share.share({ message });
   };
 
   const shareUsernameOnly = async () => {
     // Share just the username without extra formatting
-    await Share.share({ message: tag });
+    await Share.share({ message: tagWithAt });
   };
 
   const handleShare = async () => {
@@ -217,7 +218,7 @@ const ReceiveScreen: React.FC<Props> = () => {
         <View style={styles.qrContainer}>
           {hasTag ? (
             <QRCode
-              value={`blirpme:${tag}`}
+              value={`blirpme:${tagWithAt}`}
               size={200}
               backgroundColor={theme.colors.background}
               color={theme.colors.text.primary}
@@ -238,19 +239,29 @@ const ReceiveScreen: React.FC<Props> = () => {
       {/* Username Display */}
       <View style={styles.addressSection}>
         <Text style={styles.addressLabel}>
-          Your Username
+          Username
         </Text>
-        <View style={styles.addressContainer}>
-          <Text 
-            style={[
-              styles.addressText,
-              !displayValue && styles.addressTextPlaceholder
-            ]} 
-            numberOfLines={1}
-          >
-            {displayValue || 'No username set'}
-          </Text>
-        </View>
+        <TouchableOpacity 
+          style={styles.addressContainer}
+          onPress={hasTag ? handleCopy : undefined}
+          disabled={!hasTag}
+          activeOpacity={0.7}
+        >
+          <View style={styles.usernameRow}>
+            {hasTag && (
+              <Text style={styles.atSymbol}>@</Text>
+            )}
+            <Text 
+              style={[
+                styles.addressText,
+                !displayValue && styles.addressTextPlaceholder
+              ]} 
+              numberOfLines={1}
+            >
+              {displayValue || 'No username set'}
+            </Text>
+          </View>
+        </TouchableOpacity>
         {!hasTag && (
           <Text style={styles.noTagHint}>
             Set a username in your profile to receive payments.
@@ -406,6 +417,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.md,
+  },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  atSymbol: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+    marginRight: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   addressText: {
     ...theme.typography.callout,
