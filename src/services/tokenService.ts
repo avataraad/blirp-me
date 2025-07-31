@@ -3,8 +3,9 @@
  * Integrates with Moralis API and the verified token list
  */
 
-import { ETHEREUM_MAINNET_TOKENS, VerifiedToken } from '../config/tokens';
+import { ETHEREUM_MAINNET_TOKENS, BASE_MAINNET_TOKENS, VerifiedToken, getTokensByChainId } from '../config/tokens';
 import { TokenBalance, getWalletBalances } from './balance';
+import { SupportedChainId } from '../config/chains';
 
 export interface TokenWithBalance extends VerifiedToken {
   balance: string;
@@ -17,18 +18,32 @@ export interface TokenWithBalance extends VerifiedToken {
 /**
  * Get all verified tokens with their balances for a wallet
  * @param walletAddress The wallet address to check
+ * @param chains Array of chain IDs to query (optional)
  * @returns Array of tokens with balance information
  */
 export const getVerifiedTokensWithBalances = async (
-  walletAddress: string
+  walletAddress: string,
+  chains?: SupportedChainId[]
 ): Promise<TokenWithBalance[]> => {
   try {
-    // Fetch all balances from Moralis
-    const walletData = await getWalletBalances(walletAddress, 'eth');
+    // Fetch all balances from Moralis for enabled chains
+    const walletData = await getWalletBalances(walletAddress, chains || [1, 8453]);
     const moralisTokens = walletData.tokens;
     
+    // Get all verified tokens for the chains
+    const allVerifiedTokens: VerifiedToken[] = [];
+    if (!chains || chains.length === 0) {
+      // Default to all chains
+      allVerifiedTokens.push(...ETHEREUM_MAINNET_TOKENS, ...BASE_MAINNET_TOKENS);
+    } else {
+      // Get tokens for specific chains
+      chains.forEach(chainId => {
+        allVerifiedTokens.push(...getTokensByChainId(chainId));
+      });
+    }
+    
     // Map verified tokens with their balance data
-    const tokensWithBalances: TokenWithBalance[] = ETHEREUM_MAINNET_TOKENS.map(verifiedToken => {
+    const tokensWithBalances: TokenWithBalance[] = allVerifiedTokens.map(verifiedToken => {
       // Find matching token from Moralis data
       const moralisToken = moralisTokens.find(t => {
         if (verifiedToken.isNative) {

@@ -1,4 +1,3 @@
-import { VerifiedToken } from '../config/tokens';
 import { TokenWithBalance } from '../services/tokenService';
 
 export type RootStackParamList = {
@@ -18,6 +17,7 @@ export type RootStackParamList = {
       amountUSD: string;
       amountWei: string;
     };
+    Settings: undefined;
   };
 
   export type MainTabParamList = {

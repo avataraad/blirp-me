@@ -19,6 +19,7 @@ import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useWallet } from '../contexts/WalletContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWithBalance } from '../services/tokenService';
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
@@ -43,6 +44,7 @@ type TradeType = 'manual' | 'auto';
 
 const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress } = useWallet();
+  const { enabledChains } = useSettings();
   
   // State
   const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
@@ -60,7 +62,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   // Load tokens and prices
   useEffect(() => {
     loadTokensAndPrices();
-  }, [walletAddress]);
+  }, [walletAddress, enabledChains]);
   
   const loadTokensAndPrices = async () => {
     if (!walletAddress) return;
@@ -68,7 +70,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoadingTokens(true);
     try {
       const [tokensData, ethPriceData] = await Promise.all([
-        getVerifiedTokensWithBalances(walletAddress),
+        getVerifiedTokensWithBalances(walletAddress, enabledChains),
         getEthPrice()
       ]);
       

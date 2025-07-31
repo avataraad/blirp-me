@@ -6,6 +6,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { VerifiedToken } from '../config/tokens';
 import { createError, ErrorType } from './errorHandling';
+import { SupportedChainId, CHAIN_IDS } from '../config/chains';
 
 // Bungee public API endpoint
 const BUNGEE_API_URL = 'https://public-backend.bungee.exchange';
@@ -18,9 +19,6 @@ export const bungeeApi: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Ethereum mainnet chain ID
-const ETHEREUM_CHAIN_ID = 1;
 
 export interface BungeeQuoteRequest {
   userAddress: string;      // Sender wallet address
@@ -136,7 +134,8 @@ export const getBungeeQuote = async (
   userAddress: string,
   slippage: number = 1,
   enableManual: boolean = true,
-  disableAuto: boolean = false
+  disableAuto: boolean = false,
+  chainId?: SupportedChainId
 ): Promise<BungeeQuoteResponse> => {
   
   try {
@@ -151,10 +150,24 @@ export const getBungeeQuote = async (
       );
     }
 
+    // Use the provided chainId or determine from token
+    const effectiveChainId = chainId || fromToken.chainId;
+    
+    // For same-chain swaps, ensure both tokens are on the same chain
+    if (fromToken.chainId !== toToken.chainId) {
+      throw createError(
+        ErrorType.INVALID_AMOUNT,
+        'Cross-chain swaps not supported yet',
+        'Tokens must be on the same chain',
+        undefined,
+        false
+      );
+    }
+
     const params = {
       userAddress: userAddress,
-      originChainId: ETHEREUM_CHAIN_ID,
-      destinationChainId: ETHEREUM_CHAIN_ID,
+      originChainId: effectiveChainId,
+      destinationChainId: effectiveChainId,
       inputToken: getBungeeTokenAddress(fromToken),
       inputAmount: amountWei,
       receiverAddress: userAddress, // Same as userAddress for same-chain swaps
@@ -287,7 +300,7 @@ export const getBungeeQuote = async (
         decimals: selectedRoute.output?.token?.decimals || toToken.decimals,
         name: selectedRoute.output?.token?.name || toToken.name,
         logoURI: selectedRoute.output?.token?.logoURI || selectedRoute.output?.token?.icon || toToken.logoURI,
-        chainId: selectedRoute.output?.token?.chainId || ETHEREUM_CHAIN_ID
+        chainId: selectedRoute.output?.token?.chainId || effectiveChainId
       },
       fromAmount: result.input.amount,
       toAmount: selectedRoute.output?.amount || '0',
@@ -445,7 +458,7 @@ export const buildManualTransaction = async (
       data: txData.data,
       value: txData.value || '0x00',
       gasLimit: txData.gasLimit || '300000',
-      chainId: txData.chainId || ETHEREUM_CHAIN_ID
+      chainId: txData.chainId || CHAIN_IDS.ETHEREUM
     };
     
     return {
@@ -761,14 +774,15 @@ export const pollForManualCompletion = async (
  * @returns Status response
  */
 export const checkBungeeTransactionStatus = async (
-  transactionHash: string
+  transactionHash: string,
+  chainId: SupportedChainId = CHAIN_IDS.ETHEREUM
 ): Promise<BungeeStatusResponse> => {
   
   try {
     const params: BungeeStatusRequest = {
       transactionHash,
-      originChainId: ETHEREUM_CHAIN_ID,
-      destinationChainId: ETHEREUM_CHAIN_ID,
+      originChainId: chainId,
+      destinationChainId: chainId,
     };
 
     const response = await bungeeApi.get('/api/v1/bungee/req-status', { params });

@@ -16,6 +16,7 @@ import PayScreen from '../screens/PayScreen';
 import TradeScreen from '../screens/TradeScreen';
 import TradeReviewScreen from '../screens/TradeReviewScreen';
 import SupabaseTestScreen from '../screens/SupabaseTestScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 // Import navigation types
 import { RootStackParamList, MainTabParamList } from '../types/navigation';
@@ -147,6 +148,11 @@ const AppNavigator = () => {
           name="SupabaseTest"
           component={SupabaseTestScreen}
           options={{ title: 'Supabase Test' }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: 'Settings' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

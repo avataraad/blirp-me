@@ -10,10 +10,13 @@ import {
   Image,
 } from 'react-native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { MainTabParamList } from '../types/navigation';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { MainTabParamList, RootStackParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useWallet } from '../contexts/WalletContext';
+import { useSettings } from '../contexts/SettingsContext';
 import {
   getWalletBalances,
   getEthBalance,
@@ -33,6 +36,8 @@ type Props = {
 
 const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress, logout } = useWallet();
+  const stackNavigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const { enabledChains } = useSettings();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [balanceData, setBalanceData] = useState<WalletBalanceResponse | null>(null);
@@ -48,7 +53,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
     try {
       setError(null);
-      const response = await getWalletBalances(walletAddress);
+      const response = await getWalletBalances(walletAddress, enabledChains);
       setBalanceData(response);
     } catch (err) {
       console.error('Failed to fetch balances:', err);
@@ -57,7 +62,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [walletAddress]);
+  }, [walletAddress, enabledChains]);
 
   // Fetch on mount and when address changes
   useEffect(() => {
@@ -131,6 +136,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.headerIcon}>
             <Icon name="chatbubble-outline" size={24} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => stackNavigation.navigate('Settings')}>
+            <Icon name="settings-outline" size={24} color={theme.colors.text.primary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
             <Icon name="log-out-outline" size={24} color={theme.colors.text.primary} />

@@ -5,6 +5,7 @@ import { StatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppNavigator from './src/navigation/AppNavigator';
 import { WalletProvider } from './src/contexts/WalletContext';
+import { SettingsProvider } from './src/contexts/SettingsContext';
 import { resumeMonitoring, clearOldTransactions } from './src/services/transactionMonitor';
 
 console.log('App.tsx: Starting app');
@@ -32,10 +33,12 @@ const App = () => {
   
   return (
     <QueryClientProvider client={queryClient}>
-      <WalletProvider>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AppNavigator />
-      </WalletProvider>
+      <SettingsProvider>
+        <WalletProvider>
+          <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+          <AppNavigator />
+        </WalletProvider>
+      </SettingsProvider>
     </QueryClientProvider>
   );
 };

@@ -3,7 +3,8 @@ import Config from 'react-native-config';
 import { getBalance } from '@wagmi/core';
 import { formatEther } from 'viem';
 import { config } from '../config/wagmi';
-import { ETHEREUM_MAINNET_TOKENS, getTokenByAddress, getTokenBySymbol } from '../config/tokens';
+import { getTokenByAddress, getTokensByChainId } from '../config/tokens';
+import { SupportedChainId, getMoralisChainId } from '../config/chains';
 
 // Moralis API configuration
 const MORALIS_API_KEY = Config.MORALIS_API_KEY;
@@ -25,6 +26,7 @@ export interface TokenBalance {
   usd_value: number | null;
   native_token?: boolean;
   portfolio_percentage?: number;
+  chainId?: SupportedChainId; // Added for multi-chain support
 }
 
 export interface WalletBalanceResponse {
@@ -38,49 +40,59 @@ export interface WalletBalanceResponse {
 /**
  * Fetch all token balances for a wallet address using Moralis API
  * @param address Ethereum address to check balances for
- * @param chain Chain to query (default: 'eth')
- * @returns WalletBalanceResponse with all token balances
+ * @param chains Array of chain IDs to query
+ * @returns WalletBalanceResponse with all token balances across chains
  */
 export const getWalletBalances = async (
   address: string,
-  chain: string = 'eth'
+  chains: SupportedChainId[]
 ): Promise<WalletBalanceResponse> => {
   try {
     const allTokens: TokenBalance[] = [];
-    let cursor: string | null = null;
-    let hasMore = true;
+    
+    // Query each chain separately
+    for (const chainId of chains) {
+      const moralisChainId = getMoralisChainId(chainId);
+      let cursor: string | null = null;
+      let hasMore = true;
 
-    while (hasMore) {
-      const params: any = {
-        chain,
-        exclude_spam: true,
-        exclude_unverified_contracts: true,
-      };
+      while (hasMore) {
+        const params: any = {
+          chain: moralisChainId,
+          exclude_spam: true,
+          exclude_unverified_contracts: true,
+        };
 
-      if (cursor) {
-        params.cursor = cursor;
-      }
-
-      const response = await axios.get(
-        `${MORALIS_BASE_URL}/wallets/${address}/tokens`,
-        {
-          params,
-          headers: {
-            'X-API-Key': MORALIS_API_KEY,
-            'Accept': 'application/json',
-          },
+        if (cursor) {
+          params.cursor = cursor;
         }
-      );
 
-      const data = response.data;
-      
-      // Process tokens from this page
-      const tokens = data.result || [];
-      allTokens.push(...tokens);
+        const response = await axios.get(
+          `${MORALIS_BASE_URL}/wallets/${address}/tokens`,
+          {
+            params,
+            headers: {
+              'X-API-Key': MORALIS_API_KEY,
+              'Accept': 'application/json',
+            },
+          }
+        );
 
-      // Check if there are more pages
-      cursor = data.cursor || null;
-      hasMore = !!cursor && tokens.length > 0;
+        const data = response.data;
+        
+        // Process tokens from this page
+        const tokens = data.result || [];
+        // Add chain ID to each token for later filtering
+        const tokensWithChain = tokens.map((token: any) => ({
+          ...token,
+          chainId
+        }));
+        allTokens.push(...tokensWithChain);
+
+        // Check if there are more pages
+        cursor = data.cursor || null;
+        hasMore = !!cursor && tokens.length > 0;
+      }
     }
 
     // Calculate total USD value and portfolio percentages
@@ -106,9 +118,9 @@ export const getWalletBalances = async (
       )) {
         return true;
       }
-      // For ERC20 tokens, check if the address matches our verified list
+      // For ERC20 tokens, check if the address matches our verified list for the specific chain
       if (token.token_address && token.token_address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-        const verifiedToken = getTokenByAddress(token.token_address);
+        const verifiedToken = getTokenByAddress(token.token_address, token.chainId);
         return !!verifiedToken;
       }
       return false;
