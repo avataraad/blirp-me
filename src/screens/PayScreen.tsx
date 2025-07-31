@@ -68,7 +68,6 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [gasEstimateUSD, setGasEstimateUSD] = useState<string>('0.00');
-  const [isMaxAmount, setIsMaxAmount] = useState(false);
   
   // Transaction execution state
   const [isExecuting, setIsExecuting] = useState(false);
@@ -281,7 +280,6 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     if (parts.length > 2) return;
     if (parts[1]?.length > 2) return; // Max 2 decimal places for USD
     setAmountUSD(cleaned);
-    setIsMaxAmount(false); // Reset max amount flag when user manually changes amount
   };
 
   const handleMaxAmount = async () => {
@@ -319,15 +317,8 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         const maxSendableEth = Math.max(0, balance - gasEth);
         const maxSendableUSD = maxSendableEth * ethPrice;
         
-        // Apply an additional safety margin to prevent rounding issues
-        // Reduce by 0.1% to account for any precision loss in conversions
-        const safetyMargin = 0.999;
-        const safeSendableEth = maxSendableEth * safetyMargin;
-        const safeSendableUSD = safeSendableEth * ethPrice;
-        
         // Set the amount with 2 decimal places
-        setAmountUSD(safeSendableUSD.toFixed(2));
-        setIsMaxAmount(true);
+        setAmountUSD(maxSendableUSD.toFixed(2));
         
         console.log('Max amount calculation:', {
           balance,
@@ -335,8 +326,7 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           gasWithBuffer: formatEther(gasWithBuffer),
           totalGasReservation: gasEth,
           maxSendableEth,
-          safeSendableEth,
-          safeSendableUSD,
+          maxSendableUSD,
           chainId: currentChainId,
           bufferPercentage: bufferPercentage.toString() + '%'
         });
@@ -346,10 +336,8 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       // Fallback: use a more conservative estimate
       const estimatedGasEth = currentChainId === 8453 ? 0.001 : 0.0005; // More conservative for Base
       const maxSendableEth = Math.max(0, balance - estimatedGasEth);
-      const safeSendableEth = maxSendableEth * 0.999; // Apply safety margin
-      const safeSendableUSD = safeSendableEth * ethPrice;
-      setAmountUSD(safeSendableUSD.toFixed(2));
-      setIsMaxAmount(true);
+      const maxSendableUSD = maxSendableEth * ethPrice;
+      setAmountUSD(maxSendableUSD.toFixed(2));
     }
   };
 
@@ -477,10 +465,7 @@ This action requires biometric authentication.`;
   
   const totalAmountETH = ethAmount + gasEstimateEth;
   const totalAmountUSD = parseFloat(amountUSD || '0') + parseFloat(gasEstimateUSD);
-  
-  // For max amount, allow a tiny tolerance for rounding errors (0.0001 ETH ~= $0.25)
-  const tolerance = isMaxAmount ? 0.0001 : 0;
-  const isInsufficientBalance = totalAmountETH > (balance + tolerance);
+  const isInsufficientBalance = totalAmountETH > balance;
   const balanceUSD = balance * ethPrice;
 
   return (
