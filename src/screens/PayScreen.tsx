@@ -282,6 +282,42 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     setAmountUSD(cleaned);
   };
 
+  const handleMaxAmount = async () => {
+    if (!walletAddress || balance <= 0) return;
+    
+    try {
+      // Simulate a small transaction to get accurate gas estimate
+      const testAmountWei = parseEther('0.0001').toString();
+      const gasSimulation = await simulateTransaction({
+        from: walletAddress,
+        to: resolvedAddress || '0x0000000000000000000000000000000000000001', // Use resolved address or a dummy address
+        value: testAmountWei,
+        chainId: currentChainId,
+      });
+      
+      if (gasSimulation.success) {
+        // Calculate gas cost with slippage buffer (2%)
+        const gasWei = BigInt(gasSimulation.gasLimit) * BigInt(gasSimulation.maxFeePerGas);
+        const gasWithSlippage = gasWei + (gasWei * BigInt(2) / BigInt(100)); // Add 2% slippage
+        const gasEth = parseFloat(formatEther(gasWithSlippage));
+        
+        // Calculate max sendable amount
+        const maxSendableEth = Math.max(0, balance - gasEth);
+        const maxSendableUSD = maxSendableEth * ethPrice;
+        
+        // Set the amount with 2 decimal places
+        setAmountUSD(maxSendableUSD.toFixed(2));
+      }
+    } catch (error) {
+      console.error('Failed to calculate max amount:', error);
+      // Fallback: use a conservative estimate
+      const estimatedGasEth = 0.0005; // Conservative gas estimate
+      const maxSendableEth = Math.max(0, balance - estimatedGasEth);
+      const maxSendableUSD = maxSendableEth * ethPrice;
+      setAmountUSD(maxSendableUSD.toFixed(2));
+    }
+  };
+
   const handleSend = async () => {
     if (!isValidAddress) {
       const errorMessage = tagError || 'Please enter a valid username or Ethereum address.';
@@ -512,6 +548,18 @@ This action requires biometric authentication.`;
                 keyboardType="decimal-pad"
               />
               <Text style={styles.currencyLabel}>USD</Text>
+              <TouchableOpacity 
+                style={styles.maxButton} 
+                onPress={handleMaxAmount}
+                disabled={!walletAddress || balance <= 0}
+              >
+                <Text style={[
+                  styles.maxButtonText,
+                  (!walletAddress || balance <= 0) && styles.maxButtonTextDisabled
+                ]}>
+                  MAX
+                </Text>
+              </TouchableOpacity>
             </View>
             {amountUSD && (
               <Text style={styles.ethEquivalent}>
@@ -847,6 +895,19 @@ const styles = StyleSheet.create({
   loadingText: {
     ...theme.typography.footnote,
     color: theme.colors.text.secondary,
+  },
+  maxButton: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    marginLeft: theme.spacing.xs,
+  },
+  maxButtonText: {
+    ...theme.typography.caption1,
+    color: theme.colors.primary,
+    fontWeight: '700',
+  },
+  maxButtonTextDisabled: {
+    color: theme.colors.text.tertiary,
   },
 });
 
