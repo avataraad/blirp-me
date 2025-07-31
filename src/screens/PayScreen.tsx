@@ -286,20 +286,32 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
     if (!walletAddress || balance <= 0) return;
     
     try {
-      // Simulate a small transaction to get accurate gas estimate
-      const testAmountWei = parseEther('0.0001').toString();
+      // Use the actual recipient address if available for more accurate gas estimation
+      const targetAddress = resolvedAddress || '0x0000000000000000000000000000000000000001';
+      
+      // Simulate a transaction with a reasonable amount to get accurate gas estimate
+      const testAmountWei = parseEther('0.001').toString();
       const gasSimulation = await simulateTransaction({
         from: walletAddress,
-        to: resolvedAddress || '0x0000000000000000000000000000000000000001', // Use resolved address or a dummy address
+        to: targetAddress,
         value: testAmountWei,
         chainId: currentChainId,
       });
       
       if (gasSimulation.success) {
-        // Calculate gas cost with slippage buffer (2%)
+        // Calculate gas cost with a more conservative buffer
         const gasWei = BigInt(gasSimulation.gasLimit) * BigInt(gasSimulation.maxFeePerGas);
-        const gasWithSlippage = gasWei + (gasWei * BigInt(2) / BigInt(100)); // Add 2% slippage
-        const gasEth = parseFloat(formatEther(gasWithSlippage));
+        
+        // Use different buffers based on network
+        // Base network (chainId 8453) can have more volatile gas prices
+        const bufferPercentage = currentChainId === 8453 ? BigInt(10) : BigInt(5); // 10% for Base, 5% for others
+        const gasWithBuffer = gasWei + (gasWei * bufferPercentage / BigInt(100));
+        
+        // Add a minimum gas reservation to handle edge cases
+        const minGasReservation = parseEther('0.0002'); // ~$0.50 at $2500 ETH
+        const totalGasReservation = gasWithBuffer > minGasReservation ? gasWithBuffer : minGasReservation;
+        
+        const gasEth = parseFloat(formatEther(totalGasReservation));
         
         // Calculate max sendable amount
         const maxSendableEth = Math.max(0, balance - gasEth);
@@ -307,11 +319,22 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
         
         // Set the amount with 2 decimal places
         setAmountUSD(maxSendableUSD.toFixed(2));
+        
+        console.log('Max amount calculation:', {
+          balance,
+          gasEstimate: formatEther(gasWei),
+          gasWithBuffer: formatEther(gasWithBuffer),
+          totalGasReservation: gasEth,
+          maxSendableEth,
+          maxSendableUSD,
+          chainId: currentChainId,
+          bufferPercentage: bufferPercentage.toString() + '%'
+        });
       }
     } catch (error) {
       console.error('Failed to calculate max amount:', error);
-      // Fallback: use a conservative estimate
-      const estimatedGasEth = 0.0005; // Conservative gas estimate
+      // Fallback: use a more conservative estimate
+      const estimatedGasEth = currentChainId === 8453 ? 0.001 : 0.0005; // More conservative for Base
       const maxSendableEth = Math.max(0, balance - estimatedGasEth);
       const maxSendableUSD = maxSendableEth * ethPrice;
       setAmountUSD(maxSendableUSD.toFixed(2));
