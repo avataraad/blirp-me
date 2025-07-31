@@ -350,17 +350,16 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
       
       // Get quote from Bungee
       const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
-      const quoteResponse = await getBungeeQuote({
-        fromChainId: currentChainId,
-        fromTokenAddress: fromToken.address,
-        fromTokenDecimals: fromToken.decimals,
-        toChainId: currentChainId,
-        toTokenAddress: toToken.address,
-        toTokenDecimals: toToken.decimals,
-        userAddress: walletAddress!,
-        amount: amountWei,
-        slippage: 100, // 1% slippage
-      });
+      const quoteResponse = await getBungeeQuote(
+        fromToken,
+        toToken,
+        amountWei,
+        walletAddress,
+        1, // 1% slippage
+        true, // enableManual
+        false, // disableAuto
+        currentChainId
+      );
       
       if (!quoteResponse.success || !quoteResponse.routes || quoteResponse.routes.length === 0) {
         throw new Error('No routes available for this trade');
