@@ -37,10 +37,8 @@ const ReceiveScreen: React.FC<Props> = () => {
   const hasTag = Boolean(walletTag && walletTag.trim());
   const hasAddress = Boolean(walletAddress);
   
-  // Set initial display mode based on available data
-  const [displayMode, setDisplayMode] = useState<'address' | 'tag'>(
-    hasTag ? 'tag' : 'address'
-  );
+  // Force tag-only display
+  const displayMode = 'tag';
 
   // Toast state
   const [toast, setToast] = useState<{
@@ -60,7 +58,7 @@ const ReceiveScreen: React.FC<Props> = () => {
   const address = walletAddress || '';
   const tag = walletTag?.trim() ? `@${walletTag.trim()}` : '';
 
-  const displayValue = displayMode === 'tag' ? tag : address;
+  const displayValue = tag;
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, message, type });
@@ -95,19 +93,19 @@ const ReceiveScreen: React.FC<Props> = () => {
   };
 
   const shareAsText = async () => {
-    const shareMessage = displayMode === 'tag' && hasTag
+    const shareMessage = hasTag
       ? `💎 Send crypto to my BlirpMe wallet!\n\n${displayValue}\n\nBlirpMe makes crypto payments simple with @username tags.\n\nDownload: https://blirpme.com`
-      : `💰 Send ETH to my wallet:\n\n${displayValue}\n\n🔗 Network: Ethereum Mainnet\n⚠️  Only send ETH or ERC-20 tokens to this address\n📱 Powered by BlirpMe`;
+      : `💰 Send crypto to my BlirpMe wallet!\n\nI'm setting up my @username tag. For now, send ETH to:\n\n${address}\n\n📱 Powered by BlirpMe`;
     
     await Share.share({ message: shareMessage });
   };
 
   const shareAsPaymentLink = async () => {
-    // Create ethereum: URI for payment requests
-    const paymentUri = `ethereum:${address}`;
-    const message = displayMode === 'tag' && hasTag
+    // Create blirpme: URI for tag payments or ethereum: URI for address payments
+    const paymentUri = hasTag ? `blirpme:${displayValue}` : `ethereum:${address}`;
+    const message = hasTag
       ? `💎 Pay me using BlirpMe: ${displayValue}\n\nPayment Link: ${paymentUri}\n\nDownload BlirpMe: https://blirpme.com`
-      : `💰 ETH Payment Request\n\nAddress: ${displayValue}\nPayment Link: ${paymentUri}\n\n📱 Powered by BlirpMe`;
+      : `💰 BlirpMe Payment Request\n\nTag: ${displayValue} (setting up)\nPayment Link: ${paymentUri}\n\n📱 Download BlirpMe: https://blirpme.com`;
     
     await Share.share({ message });
   };
@@ -225,7 +223,7 @@ const ReceiveScreen: React.FC<Props> = () => {
         <View style={styles.qrContainer}>
           {hasAddress ? (
             <QRCode
-              value={displayMode === 'tag' && hasTag ? tag : address}
+              value={hasTag ? `blirpme:${tag}` : address}
               size={200}
               backgroundColor={theme.colors.background}
               color={theme.colors.text.primary}
@@ -237,45 +235,30 @@ const ReceiveScreen: React.FC<Props> = () => {
           )}
         </View>
 
-        {/* Toggle Buttons - Only show if user has both tag and address */}
-        {hasTag && hasAddress && (
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                displayMode === 'tag' && styles.toggleButtonActive,
-              ]}
-              onPress={() => setDisplayMode('tag')}
-            >
-              <Text style={[
-                styles.toggleButtonText,
-                displayMode === 'tag' && styles.toggleButtonTextActive,
-              ]}>
-                Tag
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                displayMode === 'address' && styles.toggleButtonActive,
-              ]}
-              onPress={() => setDisplayMode('address')}
-            >
-              <Text style={[
-                styles.toggleButtonText,
-                displayMode === 'address' && styles.toggleButtonTextActive,
-              ]}>
-                Address
-              </Text>
-            </TouchableOpacity>
-          </View>
+        {/* Show Address Testing Button - For development/testing only */}
+        {hasAddress && (
+          <TouchableOpacity 
+            style={styles.showAddressButton}
+            onPress={() => {
+              Alert.alert(
+                'Wallet Address',
+                address,
+                [
+                  { text: 'Copy', onPress: () => Clipboard.setString(address) },
+                  { text: 'Close', style: 'cancel' }
+                ]
+              );
+            }}
+          >
+            <Text style={styles.showAddressButtonText}>Show Address</Text>
+          </TouchableOpacity>
         )}
       </View>
 
       {/* Address/Tag Display */}
       <View style={styles.addressSection}>
         <Text style={styles.addressLabel}>
-          {displayMode === 'tag' ? 'Your Tag' : 'Your Address'}
+          Your Tag
         </Text>
         <View style={styles.addressContainer}>
           <Text 
@@ -283,14 +266,14 @@ const ReceiveScreen: React.FC<Props> = () => {
               styles.addressText,
               !displayValue && styles.addressTextPlaceholder
             ]} 
-            numberOfLines={displayMode === 'address' ? 2 : 1}
+            numberOfLines={1}
           >
-            {displayValue || (displayMode === 'tag' ? 'No tag set' : 'Loading address...')}
+            {displayValue || 'No tag set'}
           </Text>
         </View>
-        {displayMode === 'tag' && !hasTag && hasAddress && (
+        {!hasTag && hasAddress && (
           <Text style={styles.noTagHint}>
-            You haven't set a tag yet. Use your address to receive funds.
+            You haven't set a tag yet. Share this screen to receive payments with your @username.
           </Text>
         )}
       </View>
@@ -331,9 +314,9 @@ const ReceiveScreen: React.FC<Props> = () => {
         </Text>
       </View>
 
-      {/* Network Badge */}
+      {/* BlirpMe Badge */}
       <View style={styles.networkBadge}>
-        <Text style={styles.networkBadgeText}>Ethereum Mainnet</Text>
+        <Text style={styles.networkBadgeText}>BlirpMe Wallet</Text>
       </View>
       </ScrollView>
     </View>
@@ -363,27 +346,19 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     ...theme.shadows.lg,
   },
-  toggleContainer: {
-    flexDirection: 'row',
+  showAddressButton: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xs,
-  },
-  toggleButton: {
     paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.text.tertiary,
   },
-  toggleButtonActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  toggleButtonText: {
-    ...theme.typography.callout,
+  showAddressButtonText: {
+    ...theme.typography.caption1,
     color: theme.colors.text.secondary,
     fontWeight: '600',
-  },
-  toggleButtonTextActive: {
-    color: theme.colors.text.inverse,
+    textAlign: 'center',
   },
   addressSection: {
     width: '100%',

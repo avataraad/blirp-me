@@ -42,7 +42,7 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
-  const { walletAddress: contextWalletAddress } = useWallet();
+  const { walletAddress: contextWalletAddress, wallet } = useWallet();
   const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
@@ -57,7 +57,9 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   const [balance, setBalance] = useState<number>(0);
   const [ethPrice, setEthPrice] = useState<number>(1900);
   const [currentChainId, setCurrentChainId] = useState<SupportedChainId>(1);
-  const walletAddress = contextWalletAddress || '';
+  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
+  // Try to get wallet address from either direct property or wallet object
+  const walletAddress = contextWalletAddress || wallet?.address || '';
   
   // Transaction simulation state
   const [simulation, setSimulation] = useState<SimulationResult | null>(null);
@@ -82,12 +84,22 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const loadWalletData = async () => {
       try {
+        console.log('PayScreen: Loading wallet data...', {
+          walletAddress,
+          contextWalletAddress,
+          wallet,
+          currentChainId,
+          enabledChains
+        });
+        
         if (!walletAddress) {
           // No wallet address available
-          console.error('No wallet address available');
-          Alert.alert('Error', 'Please sign in to your wallet first');
+          console.error('PayScreen: No wallet address available');
+          // Don't show alert on initial load, just log
           return;
         }
+        
+        console.log('PayScreen: Fetching balance for address:', walletAddress);
         
         // Get balance from the current chain
         const balanceResult = await getBalance(config, {
@@ -95,20 +107,34 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
           chainId: currentChainId
         });
         
+        console.log('PayScreen: Balance result:', {
+          value: balanceResult.value.toString(),
+          formatted: formatEther(balanceResult.value),
+          chainId: currentChainId
+        });
+        
         // Load ETH price
         const priceResult = await getEthPrice();
+        console.log('PayScreen: ETH price:', priceResult);
         
         setBalance(parseFloat(formatEther(balanceResult.value)));
         setEthPrice(priceResult);
+        setIsLoadingBalance(false);
       } catch (error) {
-        console.error('Failed to load wallet data:', error);
-        Alert.alert('Error', 'Failed to load wallet data');
+        console.error('PayScreen: Failed to load wallet data:', error);
+        setIsLoadingBalance(false);
+        // Don't show alert for balance loading errors, just log
       }
     };
 
-    loadWalletData();
+    if (walletAddress || contextWalletAddress) {
+      setIsLoadingBalance(true);
+      loadWalletData();
+    } else {
+      setIsLoadingBalance(false);
+    }
     // Tags are now managed through the database
-  }, [walletAddress, currentChainId]);
+  }, [walletAddress, contextWalletAddress, currentChainId]);
 
   // Simulate transaction when recipient and amount are valid
   const simulateTransactionDebounced = useCallback(
@@ -373,11 +399,24 @@ This action requires biometric authentication.`;
           <Text style={styles.balanceLabel}>
             Available Balance {enabledChains.length > 0 && CHAIN_NAMES[currentChainId] ? `(${CHAIN_NAMES[currentChainId]})` : ''}
           </Text>
-          <Text style={styles.balanceAmount}>
-            ${walletAddress ? balanceUSD.toFixed(2) : '0.00'}
-            {walletAddress && balance === 0 && <ActivityIndicator size="small" color={theme.colors.primary} />}
-          </Text>
-          <Text style={styles.balanceETH}>{walletAddress ? balance.toFixed(4) : '0.0000'} ETH</Text>
+          {isLoadingBalance ? (
+            <View>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.balanceETH}>Loading balance...</Text>
+            </View>
+          ) : !walletAddress ? (
+            <View>
+              <Text style={styles.balanceAmount}>$0.00</Text>
+              <Text style={styles.balanceETH}>No wallet connected</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.balanceAmount}>
+                ${balanceUSD.toFixed(2)}
+              </Text>
+              <Text style={styles.balanceETH}>{balance.toFixed(4)} ETH</Text>
+            </>
+          )}
         </View>
 
         {/* Recipient Input */}
