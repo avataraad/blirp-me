@@ -838,6 +838,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text.inverse,
     fontWeight: '600',
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  loadingText: {
+    ...theme.typography.footnote,
+    color: theme.colors.text.secondary,
+  },
 });
 
 export default PayScreen;
