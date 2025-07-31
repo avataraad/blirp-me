@@ -95,11 +95,22 @@ export const getCurrentGasPrices = async (chainId?: SupportedChainId): Promise<{
     const block = await publicClient.getBlock();
     const baseFeePerGas = block.baseFeePerGas || gasPrice;
     
-    // Calculate maxPriorityFeePerGas (tip) - typically 1-2 gwei
-    const maxPriorityFeePerGas = parseGwei('1').toString();
+    // Chain-specific gas pricing
+    let maxPriorityFeePerGas: string;
+    let baseFeeMultiplier: bigint;
     
-    // Calculate maxFeePerGas = (2 * baseFee) + maxPriorityFeePerGas
-    const maxFeePerGas = (baseFeePerGas * 2n + BigInt(maxPriorityFeePerGas)).toString();
+    if (chainId === 8453) { // Base chain
+      // Base has very low gas prices, use minimal values
+      maxPriorityFeePerGas = parseGwei('0.001').toString(); // 0.001 gwei
+      baseFeeMultiplier = 11n; // 1.1x multiplier
+    } else { // Ethereum mainnet and others
+      // Standard values for mainnet
+      maxPriorityFeePerGas = parseGwei('1').toString(); // 1 gwei
+      baseFeeMultiplier = 20n; // 2x multiplier
+    }
+    
+    // Calculate maxFeePerGas with chain-specific multiplier
+    const maxFeePerGas = ((baseFeePerGas * baseFeeMultiplier) / 10n + BigInt(maxPriorityFeePerGas)).toString();
     
     console.log('Current gas prices:', {
       baseFeePerGas: formatGwei(baseFeePerGas),
@@ -115,12 +126,21 @@ export const getCurrentGasPrices = async (chainId?: SupportedChainId): Promise<{
     };
   } catch (error) {
     console.error('Failed to get gas prices:', error);
-    // Use more reasonable fallback gas prices (5 gwei base, 1 gwei priority)
-    return {
-      maxFeePerGas: parseGwei('5').toString(),
-      maxPriorityFeePerGas: parseGwei('1').toString(),
-      gasPrice: parseGwei('5').toString()
-    };
+    // Use chain-specific fallback gas prices
+    if (chainId === 8453) { // Base chain
+      return {
+        maxFeePerGas: parseGwei('0.1').toString(), // 0.1 gwei for Base
+        maxPriorityFeePerGas: parseGwei('0.001').toString(),
+        gasPrice: parseGwei('0.1').toString()
+      };
+    } else {
+      // Ethereum mainnet fallback
+      return {
+        maxFeePerGas: parseGwei('5').toString(),
+        maxPriorityFeePerGas: parseGwei('1').toString(),
+        gasPrice: parseGwei('5').toString()
+      };
+    }
   }
 };
 

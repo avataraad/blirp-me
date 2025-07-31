@@ -83,10 +83,8 @@ export const executeTokenApproval = async (
   try {
     const { tokenAddress, spenderAddress, amount, userAddress } = params;
     
-    // Use Permit2 address if spender is "0"
-    const actualSpender = spenderAddress === "0" 
-      ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" 
-      : spenderAddress;
+    // Use the spender address as provided
+    const actualSpender = spenderAddress;
     
     // Build approval transaction
     const approvalData = encodeFunctionData({
@@ -346,8 +344,24 @@ export const executeManualTrade = async (
     // Simulate first, but use Bungee's recommended gas limit if simulation fails
     const simulation = await simulateTransaction(txParams);
     if (!simulation.success) {
-      console.log('Simulation failed, using Bungee-recommended gas limit:', txData.gasLimit);
-      // Create a fallback simulation result using Bungee's gas estimates
+      console.log('Simulation failed:', simulation.error);
+      
+      // Check for specific errors that should stop execution
+      if (simulation.error?.includes('TRANSFER_FROM_FAILED') ||
+          simulation.error?.includes('insufficient allowance') ||
+          simulation.error?.includes('insufficient balance')) {
+        console.error('❌ Critical simulation error:', simulation.error);
+        setExecutionStatus?.('Transaction simulation failed. Please check your token approval and balance.');
+        
+        return {
+          transactionHash: '',
+          status: 'failed',
+          error: `Simulation failed: ${simulation.error}`
+        };
+      }
+      
+      // For other simulation failures, try with Bungee's gas estimate
+      console.log('Using Bungee-recommended gas limit:', txData.gasLimit);
       const gasPrices = await getCurrentGasPrices(params.fromToken.chainId);
       const fallbackSimulation = {
         assetChanges: [],
@@ -397,16 +411,32 @@ export const executeManualTrade = async (
         transactionHash: txHash,
         status: 'success'
       };
-    } catch (waitError) {
-      console.warn('Transaction wait error:', waitError);
-      // Even if waiting fails, the transaction was submitted
-      // Let the background monitoring handle it
+    } catch (waitError: any) {
+      console.error('Transaction wait error:', waitError);
+      
+      // Check if this is a revert error
+      if (waitError.message?.includes('reverted') || 
+          waitError.message?.includes('failed') ||
+          waitError.details?.includes('TRANSFER_FROM_FAILED')) {
+        console.error('❌ Transaction reverted on-chain');
+        setExecutionStatus?.('Transaction failed. Please try again.');
+        
+        return {
+          transactionHash: txHash,
+          status: 'failed',
+          error: 'Transaction reverted: ' + (waitError.details || waitError.message || 'Unknown error')
+        };
+      }
+      
+      // For other errors (timeout, network issues), return as pending
+      console.warn('⏳ Transaction status unknown, returning as pending');
+      setExecutionStatus?.('Transaction submitted. Waiting for confirmation...');
+      
+      return {
+        transactionHash: txHash,
+        status: 'pending'
+      };
     }
-    
-    return {
-      transactionHash: txHash,
-      status: 'pending'
-    };
     
   } catch (error) {
     console.error('❌ Manual trade execution failed:', error);
@@ -451,27 +481,31 @@ export const executeTrade = async (
       }
       
       // Step 1: Check and execute approval if needed
+      // For Bungee, we need to approve the Bungee contract directly
+      const BUNGEE_CONTRACT = "0x3a23F943181408EAC424116Af7b7790c94Cb97a5";
+      const actualSpenderAddress = approvalData.spenderAddress || BUNGEE_CONTRACT;
+      
       const hasApproval = await checkTokenAllowance(
         fromToken.address,
         userAddress,
-        approvalData.spenderAddress || "0",
+        actualSpenderAddress,
         params.amountWei,
         fromToken.chainId
       );
       
       if (!hasApproval) {
-        console.log('📝 Token approval required for Permit2...');
-        setExecutionStatus?.('Approving token for Permit2...');
+        console.log('📝 Token approval required for Bungee contract...');
+        setExecutionStatus?.('Approving token for trading...');
         
         await executeTokenApproval({
           tokenAddress: fromToken.address,
-          spenderAddress: approvalData.spenderAddress || "0",
+          spenderAddress: actualSpenderAddress,
           amount: params.amountWei,
           userAddress,
           chainId: fromToken.chainId
         });
         
-        console.log('✅ Token approved for Permit2');
+        console.log('✅ Token approved for Bungee contract');
       }
       
       // Step 2: Build the transaction to get signature data
