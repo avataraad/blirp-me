@@ -24,10 +24,10 @@ import { getVerifiedTokensWithBalances, sortTokensByBalanceAndMarketCap, TokenWi
 import { formatTokenAmount } from '../services/tokenService';
 import { getEthPrice } from '../services/balance';
 import { estimateTradeGas, TradeGasEstimate } from '../services/tradeGasEstimation';
-import { checkTokenAllowance, executeTrade } from '../services/tradeExecutionService';
+import { checkTokenAllowance } from '../services/tradeExecutionService';
 import { parseEther, parseUnits } from 'viem';
-import { getBungeeQuote } from '../services/bungeeService';
-import { Alert } from 'react-native';
+import { getBungeeQuote, BungeeQuoteResponse } from '../services/bungeeService';
+import { formatTokenAmount as formatAmount } from '../services/tokenService';
 
 // Bungee contract address for approval checks
 const BUNGEE_CONTRACT = '0x3a23F943181408EAC424116Af7b7790c94Cb97a5';
@@ -71,6 +71,11 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     hasApproval: true, // Default to true (ETH doesn't need approval)
     requiredAmount: '0'
   });
+  
+  // Quote state
+  const [quote, setQuote] = useState<BungeeQuoteResponse | null>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   
   // Load tokens and prices
   useEffect(() => {
@@ -182,6 +187,74 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     checkApproval();
   }, [selectedToken, walletAddress, amountUSD, tradeMode, enabledChains]);
   
+  // Fetch quote when amount changes (with debounce)
+  useEffect(() => {
+    if (!selectedToken || !amountUSD || !walletAddress || parseFloat(amountUSD) <= 0) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+    
+    const fetchQuote = async () => {
+      try {
+        setIsLoadingQuote(true);
+        setQuoteError(null);
+        
+        // Calculate amount in wei
+        let amountWei: string;
+        const usdAmount = parseFloat(amountUSD);
+        
+        if (tradeMode === 'buy') {
+          // For buying, we need to calculate ETH amount from USD
+          const ethAmount = usdAmount / ethPrice;
+          amountWei = parseEther(ethAmount.toString()).toString();
+        } else {
+          // For selling, convert USD to token amount
+          if (selectedToken.isNative) {
+            const ethAmount = usdAmount / ethPrice;
+            amountWei = parseEther(ethAmount.toString()).toString();
+          } else {
+            const tokenAmount = usdAmount / (selectedToken.usdPrice || 1);
+            amountWei = parseUnits(tokenAmount.toString(), selectedToken.decimals).toString();
+          }
+        }
+        
+        // Get the tokens for the trade
+        const ethToken = tokens.find(t => t.isNative);
+        if (!ethToken) return;
+        
+        const fromToken = tradeMode === 'buy' ? ethToken : selectedToken;
+        const toToken = tradeMode === 'buy' ? selectedToken : ethToken;
+        
+        // Get quote from Bungee
+        const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
+        const quoteResponse = await getBungeeQuote(
+          fromToken,
+          toToken,
+          amountWei,
+          walletAddress,
+          1, // 1% slippage
+          true, // enableManual
+          false, // disableAuto
+          currentChainId
+        );
+        
+        setQuote(quoteResponse);
+      } catch (error) {
+        console.error('Failed to fetch quote:', error);
+        setQuoteError('Failed to get quote');
+        setQuote(null);
+      } finally {
+        setIsLoadingQuote(false);
+      }
+    };
+    
+    // Debounce the quote fetching
+    const timeoutId = setTimeout(fetchQuote, 1000); // Wait 1 second after user stops typing
+    
+    return () => clearTimeout(timeoutId);
+  }, [selectedToken, amountUSD, walletAddress, tradeMode, ethPrice, tokens, enabledChains]);
+  
   const updateGasEstimate = async () => {
     if (!selectedToken) return;
     
@@ -273,14 +346,8 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
   
-  const [isGettingQuote, setIsGettingQuote] = useState(false);
-  const [executionStatus, setExecutionStatus] = useState<string>('');
-
-  const handleExecuteTrade = async () => {
-    if (!selectedToken || !amountUSD || !walletAddress) {
-      console.error('Missing required data:', { selectedToken, amountUSD, walletAddress });
-      return;
-    }
+  const handleReviewTrade = () => {
+    if (!selectedToken || !amountUSD) return;
     
     // Calculate amount in wei/smallest unit
     let amountWei: string;
@@ -328,122 +395,15 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     const fromToken = tradeMode === 'buy' ? ethToken : selectedToken;
     const toToken = tradeMode === 'buy' ? selectedToken : ethToken;
     
-    // Validate amountWei
-    if (!amountWei || amountWei === '0' || isNaN(Number(amountWei))) {
-      console.error('Invalid amountWei:', amountWei);
-      Alert.alert('Invalid Amount', 'Please enter a valid amount');
-      return;
-    }
-    
-    console.log('Trade parameters:', {
-      fromToken: fromToken.symbol,
-      toToken: toToken.symbol,
-      amountWei,
+    // Navigate to review screen
+    navigation.navigate('TradeReview', {
+      tradeMode,
+      tradeType,
+      fromToken,
+      toToken,
       amountUSD,
-      walletAddress,
-      tradeMode
+      amountWei
     });
-    
-    try {
-      setIsGettingQuote(true);
-      setExecutionStatus('Getting quote...');
-      
-      // Get quote from Bungee
-      const currentChainId = enabledChains.length > 0 ? enabledChains[0] : 1;
-      const quoteResponse = await getBungeeQuote(
-        fromToken,
-        toToken,
-        amountWei,
-        walletAddress,
-        1, // 1% slippage
-        true, // enableManual
-        false, // disableAuto
-        currentChainId
-      );
-      
-      if (!quoteResponse.success || !quoteResponse.routes || quoteResponse.routes.length === 0) {
-        throw new Error('No routes available for this trade');
-      }
-      
-      const bestRoute = quoteResponse.routes[0];
-      const outputAmount = BigInt(bestRoute.toAmount);
-      const outputFormatted = formatTokenAmount(outputAmount.toString(), toToken.decimals, 6);
-      
-      // Show confirmation dialog
-      Alert.alert(
-        'Confirm Trade',
-        `${tradeMode === 'buy' ? 'Buy' : 'Sell'} ${calculateNativeAmount()} ${selectedToken.symbol} for ${outputFormatted} ${toToken.symbol}?\n\nEstimated gas: ${gasEstimate?.totalGasUSD || '$0.00'}`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {
-              setIsGettingQuote(false);
-              setExecutionStatus('');
-            }
-          },
-          {
-            text: 'Confirm',
-            style: 'default',
-            onPress: async () => {
-              try {
-                setExecutionStatus('Executing trade...');
-                
-                const result = await executeTrade({
-                  routeId: bestRoute.routeId,
-                  route: bestRoute,
-                  fromToken,
-                  toToken,
-                  amountWei,
-                  userAddress: walletAddress!,
-                  slippage: 100,
-                  quoteResponse,
-                  tradeType
-                }, setExecutionStatus);
-                
-                if (result.status === 'success') {
-                  Alert.alert(
-                    'Trade Successful',
-                    `Your trade has been completed successfully!`,
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          // Reset form
-                          setAmountUSD('');
-                          setIsMaxAmount(false);
-                          // Reload balances
-                          loadTokensAndPrices();
-                        }
-                      }
-                    ]
-                  );
-                } else {
-                  throw new Error(result.error || 'Trade failed');
-                }
-              } catch (error) {
-                Alert.alert(
-                  'Trade Failed',
-                  error instanceof Error ? error.message : 'Unknown error occurred',
-                  [{ text: 'OK' }]
-                );
-              } finally {
-                setIsGettingQuote(false);
-                setExecutionStatus('');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert(
-        'Quote Failed',
-        error instanceof Error ? error.message : 'Failed to get quote',
-        [{ text: 'OK' }]
-      );
-      setIsGettingQuote(false);
-      setExecutionStatus('');
-    }
   };
   
   const renderTokenItem = ({ item }: { item: TokenWithBalance }) => {
@@ -593,6 +553,37 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </View>
           
+          {/* Quote Display */}
+          {quote && quote.success && quote.routes && quote.routes.length > 0 && (
+            <View style={styles.quoteContainer}>
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>You will receive</Text>
+                <Text style={styles.quoteValue}>
+                  {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
+                </Text>
+              </View>
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>Exchange rate</Text>
+                <Text style={styles.quoteValue}>
+                  1 {quote.routes[0].fromToken.symbol} = {(parseFloat(quote.routes[0].toAmount) / parseFloat(quote.routes[0].fromAmount)).toFixed(4)} {quote.routes[0].toToken.symbol}
+                </Text>
+              </View>
+            </View>
+          )}
+          
+          {/* Quote Loading */}
+          {isLoadingQuote && (
+            <View style={styles.quoteLoadingContainer}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Text style={styles.quoteLoadingText}>Getting best price...</Text>
+            </View>
+          )}
+          
+          {/* Quote Error */}
+          {quoteError && (
+            <Text style={styles.quoteError}>{quoteError}</Text>
+          )}
+          
           {/* Transaction Details */}
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
@@ -652,28 +643,16 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </View>
           
-          {/* Trade Button */}
+          {/* Review Button */}
           <TouchableOpacity
-            style={[styles.reviewButton, (isReviewDisabled() || isGettingQuote) && styles.reviewButtonDisabled]}
-            disabled={isReviewDisabled() || isGettingQuote}
-            onPress={handleExecuteTrade}
+            style={[styles.reviewButton, isReviewDisabled() && styles.reviewButtonDisabled]}
+            disabled={isReviewDisabled()}
+            onPress={handleReviewTrade}
           >
-            {isGettingQuote ? (
-              <ActivityIndicator size="small" color={theme.colors.text.inverse} />
-            ) : (
-              <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
-                {tradeMode === 'buy' ? 'Buy' : 'Sell'} {selectedToken?.symbol || ''}
-              </Text>
-            )}
+            <Text style={[styles.reviewButtonText, isReviewDisabled() && styles.reviewButtonTextDisabled]}>
+              Review Trade
+            </Text>
           </TouchableOpacity>
-          
-          {/* Execution Status */}
-          {executionStatus && (
-            <View style={styles.executionStatusContainer}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-              <Text style={styles.executionStatusText}>{executionStatus}</Text>
-            </View>
-          )}
           
           {/* Warnings */}
           {tradeMode === 'buy' && parseFloat(amountUSD) > parseFloat(getMaxBuyAmount()) && (
@@ -1025,6 +1004,47 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.text.secondary,
     marginLeft: theme.spacing.sm,
+  },
+  quoteContainer: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  quoteRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+  },
+  quoteLabel: {
+    ...theme.typography.callout,
+    color: theme.colors.text.secondary,
+  },
+  quoteValue: {
+    ...theme.typography.callout,
+    color: theme.colors.text.primary,
+    fontWeight: '600',
+  },
+  quoteLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  quoteLoadingText: {
+    ...theme.typography.caption1,
+    color: theme.colors.text.secondary,
+    marginLeft: theme.spacing.sm,
+  },
+  quoteError: {
+    ...theme.typography.caption1,
+    color: theme.colors.destructive,
+    textAlign: 'center',
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
 });
 
