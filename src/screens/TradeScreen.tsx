@@ -546,43 +546,12 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
                 editable={!!selectedToken}
               />
             </View>
-            {selectedToken && amountUSD && (
+            {selectedToken && amountUSD && !quote && (
               <Text style={styles.conversionText}>
                 You will {tradeMode} {calculateNativeAmount()} {selectedToken.symbol}
               </Text>
             )}
           </View>
-          
-          {/* Quote Display */}
-          {quote && quote.success && quote.routes && quote.routes.length > 0 && (
-            <View style={styles.quoteContainer}>
-              <View style={styles.quoteRow}>
-                <Text style={styles.quoteLabel}>You will receive</Text>
-                <Text style={styles.quoteValue}>
-                  {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
-                </Text>
-              </View>
-              <View style={styles.quoteRow}>
-                <Text style={styles.quoteLabel}>Exchange rate</Text>
-                <Text style={styles.quoteValue}>
-                  1 {quote.routes[0].fromToken.symbol} = {(parseFloat(quote.routes[0].toAmount) / parseFloat(quote.routes[0].fromAmount)).toFixed(4)} {quote.routes[0].toToken.symbol}
-                </Text>
-              </View>
-            </View>
-          )}
-          
-          {/* Quote Loading */}
-          {isLoadingQuote && (
-            <View style={styles.quoteLoadingContainer}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-              <Text style={styles.quoteLoadingText}>Getting best price...</Text>
-            </View>
-          )}
-          
-          {/* Quote Error */}
-          {quoteError && (
-            <Text style={styles.quoteError}>{quoteError}</Text>
-          )}
           
           {/* Transaction Details */}
           <View style={styles.detailsContainer}>
@@ -626,21 +595,58 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             )}
             
-            {tradeMode === 'buy' && (
+            {/* Show quote loading state */}
+            {isLoadingQuote && amountUSD && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Available ETH</Text>
-                <Text style={styles.detailValueText}>${ethBalance.toFixed(2)}</Text>
+                <Text style={styles.detailLabel}>You will receive</Text>
+                <View style={styles.detailValue}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                </View>
               </View>
             )}
             
-            {tradeMode === 'sell' && selectedToken && (
+            {/* Show quote error */}
+            {quoteError && amountUSD && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Available {selectedToken.symbol}</Text>
-                <Text style={styles.detailValueText}>
-                  ${(selectedToken.usdValue || 0).toFixed(2)}
+                <Text style={styles.detailLabel}>Quote</Text>
+                <Text style={[styles.detailValueSubtext, { color: theme.colors.destructive }]}>
+                  Failed to get quote
                 </Text>
               </View>
             )}
+            
+            {/* Show "You will receive" if we have a quote, otherwise show available balance */}
+            {!isLoadingQuote && !quoteError && quote && quote.success && quote.routes && quote.routes.length > 0 ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>You will receive</Text>
+                <View style={styles.detailValue}>
+                  <Text style={styles.detailValueText}>
+                    {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
+                  </Text>
+                  <Text style={styles.detailValueSubtext}>
+                    ${(parseFloat(formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)) * ((tradeMode === 'buy' ? selectedToken : ethToken)?.usdPrice || (tradeMode === 'buy' ? selectedToken : ethToken)?.priceUSD || 0)).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            ) : (!isLoadingQuote && !quoteError && (
+              <>
+                {tradeMode === 'buy' && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Available ETH</Text>
+                    <Text style={styles.detailValueText}>${ethBalance.toFixed(2)}</Text>
+                  </View>
+                )}
+                
+                {tradeMode === 'sell' && selectedToken && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Available {selectedToken.symbol}</Text>
+                    <Text style={styles.detailValueText}>
+                      ${(selectedToken.usdValue || 0).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ))}
           </View>
           
           {/* Review Button */}

@@ -235,7 +235,7 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
                 {parseFloat(toAmountFormatted).toFixed(6)} {toToken.symbol}
               </Text>
               <Text style={styles.amountUSD}>
-                ${(parseFloat(toAmountFormatted) * (toToken.usdPrice || 0)).toFixed(2)}
+                ${(parseFloat(toAmountFormatted) * (toToken.usdPrice || toToken.priceUSD || 0)).toFixed(2)}
               </Text>
             </View>
           </View>
