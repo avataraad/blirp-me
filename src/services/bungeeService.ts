@@ -831,16 +831,29 @@ export const formatQuoteDetails = (
   quote: BungeeQuoteResponse,
   route: BungeeRoute
 ) => {
-  const exchangeRate = route.exchangeRate || 1;
-  const priceImpact = Math.abs(route.priceImpact || 0);
+  // Calculate exchange rate from actual amounts
+  const fromAmountNum = parseFloat(route.fromAmount);
+  const toAmountNum = parseFloat(route.toAmount);
+  let exchangeRate = 1;
+  
+  if (fromAmountNum > 0 && toAmountNum > 0) {
+    // Account for different decimals
+    const fromDecimals = quote.fromToken.decimals;
+    const toDecimals = quote.toToken.decimals;
+    const fromAmountNormalized = fromAmountNum / Math.pow(10, fromDecimals);
+    const toAmountNormalized = toAmountNum / Math.pow(10, toDecimals);
+    
+    if (fromAmountNormalized > 0) {
+      exchangeRate = toAmountNormalized / fromAmountNormalized;
+    }
+  }
+  
   const minimumReceived = route.outputAmountMin;
   
   return {
     exchangeRate: exchangeRate.toFixed(6),
-    priceImpact: priceImpact.toFixed(2),
     minimumReceived,
     estimatedTime: Math.ceil(route.executionDuration / 60), // Convert to minutes
-    bridgeFee: route.bridgeFeeInUsd.toFixed(2),
     networkFee: route.estimatedGasFeesInUsd.toFixed(2),
   };
 };

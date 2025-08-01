@@ -203,14 +203,13 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color={theme.colors.text.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Review Trade</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        {/* Back Button */}
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()} 
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={theme.colors.text.primary} />
+        </TouchableOpacity>
         
         {/* Trade Summary */}
         <View style={styles.summaryContainer}>
@@ -253,16 +252,6 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price Impact</Text>
-            <Text style={[
-              styles.detailValue,
-              parseFloat(quoteDetails.priceImpact) > 2 && styles.warningText
-            ]}>
-              {quoteDetails.priceImpact}%
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Minimum Received</Text>
             <Text style={styles.detailValue}>
               {parseFloat(minAmountFormatted).toFixed(6)} {toToken.symbol}
@@ -287,15 +276,6 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
         
-        {/* Warnings */}
-        {parseFloat(quoteDetails.priceImpact) > 2 && (
-          <View style={styles.warningContainer}>
-            <Icon name="warning" size={20} color={theme.colors.warning} />
-            <Text style={styles.warningMessage}>
-              High price impact. Consider trading a smaller amount.
-            </Text>
-          </View>
-        )}
         
         {/* Execute Button */}
         <TouchableOpacity
@@ -363,6 +343,9 @@ const styles = StyleSheet.create({
     ...theme.typography.callout,
     color: theme.colors.text.inverse,
     fontWeight: '600',
+  },
+  backButton: {
+    padding: theme.spacing.md,
   },
   header: {
     flexDirection: 'row',

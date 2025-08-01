@@ -422,10 +422,10 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         </View>
         <View style={styles.tokenInfo}>
           <Text style={[styles.tokenSymbol, isDisabled && styles.tokenTextDisabled]}>
-            {item.symbol}
+            {item.name}
           </Text>
           <Text style={[styles.tokenName, isDisabled && styles.tokenTextDisabled]}>
-            {item.name}
+            {item.symbol}
           </Text>
         </View>
         <View style={styles.tokenBalance}>
@@ -549,7 +549,12 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Network Fee</Text>
               <View style={styles.detailValue}>
-                {isEstimatingGas ? (
+                {quote && quote.success && quote.routes && quote.routes.length > 0 ? (
+                  <>
+                    <Text style={styles.detailValueText}>${quote.routes[0].estimatedGasFeesInUsd.toFixed(2)}</Text>
+                    <Text style={styles.detailValueSubtext}>~{formatAmount(quote.routes[0].estimatedGas, 18, 6)} ETH</Text>
+                  </>
+                ) : isEstimatingGas ? (
                   <ActivityIndicator size="small" color={theme.colors.primary} />
                 ) : gasEstimate ? (
                   <>
