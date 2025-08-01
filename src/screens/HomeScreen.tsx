@@ -87,7 +87,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     // Define categories based on our supported tokens
     const cash = balanceData.tokens.filter(token => token.symbol === 'USDC');
     const assets = balanceData.tokens.filter(token => 
-      ['ETH', 'cbBTC', 'wXRP'].includes(token.symbol)
+      ['ETH', 'cbBTC', 'cbXRP'].includes(token.symbol)
     );
     const earn = balanceData.tokens.filter(token => 
       ['stETH'].includes(token.symbol) // Only stETH is in our verified list for earning
@@ -112,7 +112,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       case 'USDC': return 'USD';
       case 'ETH': return 'Ethereum';
       case 'cbBTC': return 'Bitcoin';
-      case 'wXRP': return 'XRP';
+      case 'cbXRP': return 'XRP';
       case 'stETH': return 'Ethereum'; // In Earn section
       default: return symbol;
     }

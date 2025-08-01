@@ -51,6 +51,30 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
   const { walletAddress } = useWallet();
   const { enabledChains, tradeMode: tradeType } = useSettings();
   
+  // Get token icon style based on symbol
+  const getTokenIconStyle = (symbol: string) => {
+    switch (symbol) {
+      case 'USDC': return { backgroundColor: theme.colors.primary };
+      case 'ETH': return { backgroundColor: '#627EEA' };
+      case 'cbBTC': return { backgroundColor: '#F7931A' };
+      case 'cbXRP': return { backgroundColor: '#000000' };
+      case 'stETH': return { backgroundColor: '#627EEA' };
+      default: return { backgroundColor: theme.colors.border };
+    }
+  };
+  
+  // Get token icon text based on symbol
+  const getTokenIconText = (symbol: string) => {
+    switch (symbol) {
+      case 'USDC': return '$';
+      case 'ETH': return '♦';
+      case 'cbBTC': return '₿';
+      case 'cbXRP': return 'X';
+      case 'stETH': return '♦';
+      default: return symbol[0];
+    }
+  };
+  
   // State
   const [tradeMode, setTradeMode] = useState<TradeMode>('buy');
   const [selectedToken, setSelectedToken] = useState<TokenWithBalance | null>(null);
@@ -233,7 +257,9 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
             toAmount: quoteResponse.routes[0].toAmount,
             toAmountUSD: quoteResponse.routes[0].toAmountUSD,
             toToken: quoteResponse.routes[0].toToken,
-            decimals: quoteResponse.routes[0].toToken.decimals
+            decimals: quoteResponse.routes[0].toToken?.decimals,
+            quoteToToken: quoteResponse.toToken,
+            routeToToken: quoteResponse.routes[0].toToken
           });
         }
       } catch (error) {
@@ -412,13 +438,9 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         disabled={isDisabled}
       >
         <View style={styles.tokenIconContainer}>
-          {item.logoURI ? (
-            <Image source={{ uri: item.logoURI }} style={styles.tokenIcon} />
-          ) : (
-            <View style={[styles.tokenIcon, styles.tokenIconPlaceholder]}>
-              <Text style={styles.tokenIconText}>{item.symbol[0]}</Text>
-            </View>
-          )}
+          <View style={[styles.tokenIcon, getTokenIconStyle(item.symbol)]}>
+            <Text style={styles.tokenIconText}>{getTokenIconText(item.symbol)}</Text>
+          </View>
         </View>
         <View style={styles.tokenInfo}>
           <Text style={[styles.tokenSymbol, isDisabled && styles.tokenTextDisabled]}>
@@ -502,13 +524,9 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
               ) : selectedToken ? (
                 <>
                   <View style={styles.selectedTokenInfo}>
-                    {selectedToken.logoURI ? (
-                      <Image source={{ uri: selectedToken.logoURI }} style={styles.selectedTokenIcon} />
-                    ) : (
-                      <View style={[styles.selectedTokenIcon, styles.tokenIconPlaceholder]}>
-                        <Text style={styles.tokenIconText}>{selectedToken.symbol[0]}</Text>
-                      </View>
-                    )}
+                    <View style={[styles.selectedTokenIcon, getTokenIconStyle(selectedToken.symbol)]}>
+                      <Text style={styles.tokenIconText}>{getTokenIconText(selectedToken.symbol)}</Text>
+                    </View>
                     <Text style={styles.selectedTokenSymbol}>{selectedToken.name}</Text>
                   </View>
                   <Icon name="chevron-down" size={20} color={theme.colors.text.secondary} />
@@ -601,7 +619,11 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
                   ) : quote && quote.success && quote.routes && quote.routes.length > 0 ? (
                     <>
                       <Text style={styles.detailValueText}>
-                        {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
+                        {formatTokenAmount(
+                          quote.routes[0].toAmount, 
+                          quote.routes[0].toToken?.decimals || quote.toToken?.decimals || 18, 
+                          6
+                        )} {quote.routes[0].toToken?.symbol || quote.toToken?.symbol || ''}
                       </Text>
                       <Text style={styles.detailValueSubtext}>
                         ${typeof quote.routes[0].toAmountUSD === 'number' ? quote.routes[0].toAmountUSD.toFixed(2) : '0.00'}
@@ -919,7 +941,8 @@ const styles = StyleSheet.create({
   },
   tokenIconText: {
     ...theme.typography.headline,
-    color: theme.colors.text.primary,
+    color: theme.colors.text.inverse,
+    fontWeight: '600',
   },
   tokenInfo: {
     flex: 1,
