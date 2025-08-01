@@ -509,7 +509,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={styles.tokenIconText}>{selectedToken.symbol[0]}</Text>
                       </View>
                     )}
-                    <Text style={styles.selectedTokenSymbol}>{selectedToken.symbol}</Text>
+                    <Text style={styles.selectedTokenSymbol}>{selectedToken.name}</Text>
                   </View>
                   <Icon name="chevron-down" size={20} color={theme.colors.text.secondary} />
                 </>

@@ -109,10 +109,10 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   // Custom asset names from Issue #38
   const getCustomAssetName = (symbol: string) => {
     switch (symbol) {
-      case 'USDC': return 'Digital USD';
+      case 'USDC': return 'USD';
       case 'ETH': return 'Ethereum';
       case 'cbBTC': return 'Bitcoin';
-      case 'wXRP': return 'Ripple';
+      case 'wXRP': return 'XRP';
       case 'stETH': return 'Ethereum'; // In Earn section
       default: return symbol;
     }

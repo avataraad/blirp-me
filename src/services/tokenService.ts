@@ -7,6 +7,14 @@ import { ETHEREUM_MAINNET_TOKENS, BASE_MAINNET_TOKENS, VerifiedToken, getTokensB
 import { TokenBalance, getWalletBalances } from './balance';
 import { SupportedChainId } from '../config/chains';
 
+// Token name overrides for better UX
+const TOKEN_NAME_OVERRIDES: Record<string, string> = {
+  'USD Coin': 'USD',
+  'Coinbase Wrapped Bitcoin': 'Bitcoin',
+  'Coinbase Staked ETH': 'Ethereum',
+  'Coinbase Wrapped XRP': 'XRP',
+};
+
 export interface TokenWithBalance extends VerifiedToken {
   balance: string;
   balanceFormatted: string;
@@ -52,8 +60,12 @@ export const getVerifiedTokensWithBalances = async (
         return t.token_address?.toLowerCase() === verifiedToken.address.toLowerCase();
       });
       
+      // Apply name override if available
+      const displayName = TOKEN_NAME_OVERRIDES[verifiedToken.name] || verifiedToken.name;
+      
       return {
         ...verifiedToken,
+        name: displayName,
         balance: moralisToken?.balance || '0',
         balanceFormatted: moralisToken?.balance_formatted || '0',
         usdValue: moralisToken?.usd_value || 0,
@@ -68,6 +80,7 @@ export const getVerifiedTokensWithBalances = async (
     // Return tokens with zero balances on error
     return ETHEREUM_MAINNET_TOKENS.map(token => ({
       ...token,
+      name: TOKEN_NAME_OVERRIDES[token.name] || token.name,
       balance: '0',
       balanceFormatted: '0',
       usdValue: 0,
@@ -126,6 +139,15 @@ export const getTokenWithBalance = async (
   }
   
   return allTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
+};
+
+/**
+ * Get display name for a token (with overrides applied)
+ * @param tokenName Original token name
+ * @returns Display name
+ */
+export const getTokenDisplayName = (tokenName: string): string => {
+  return TOKEN_NAME_OVERRIDES[tokenName] || tokenName;
 };
 
 /**
