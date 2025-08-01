@@ -112,20 +112,6 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
   
-  // Calculate native token amount based on USD input
-  const calculateNativeAmount = useCallback(() => {
-    if (!amountUSD || !selectedToken || !selectedToken.usdPrice) return '0';
-    
-    try {
-      const usdAmount = parseFloat(amountUSD);
-      if (isNaN(usdAmount)) return '0';
-      
-      const nativeAmount = usdAmount / selectedToken.usdPrice;
-      return nativeAmount.toFixed(selectedToken.decimals === 18 ? 6 : 4);
-    } catch {
-      return '0';
-    }
-  }, [amountUSD, selectedToken]);
   
   // Update gas estimate when trade parameters change
   useEffect(() => {
@@ -546,11 +532,6 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
                 editable={!!selectedToken}
               />
             </View>
-            {selectedToken && amountUSD && !quote && (
-              <Text style={styles.conversionText}>
-                You will {tradeMode} {calculateNativeAmount()} {selectedToken.symbol}
-              </Text>
-            )}
           </View>
           
           {/* Transaction Details */}
@@ -595,58 +576,34 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             )}
             
-            {/* Show quote loading state */}
-            {isLoadingQuote && amountUSD && (
+            {/* Always show "You will receive" when there's an amount */}
+            {amountUSD && parseFloat(amountUSD) > 0 && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>You will receive</Text>
                 <View style={styles.detailValue}>
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                </View>
-              </View>
-            )}
-            
-            {/* Show quote error */}
-            {quoteError && amountUSD && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Quote</Text>
-                <Text style={[styles.detailValueSubtext, { color: theme.colors.destructive }]}>
-                  Failed to get quote
-                </Text>
-              </View>
-            )}
-            
-            {/* Show "You will receive" if we have a quote, otherwise show available balance */}
-            {!isLoadingQuote && !quoteError && quote && quote.success && quote.routes && quote.routes.length > 0 ? (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>You will receive</Text>
-                <View style={styles.detailValue}>
-                  <Text style={styles.detailValueText}>
-                    {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
-                  </Text>
-                  <Text style={styles.detailValueSubtext}>
-                    ${(parseFloat(formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)) * ((tradeMode === 'buy' ? selectedToken : ethToken)?.usdPrice || (tradeMode === 'buy' ? selectedToken : ethToken)?.priceUSD || 0)).toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            ) : (!isLoadingQuote && !quoteError && (
-              <>
-                {tradeMode === 'buy' && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Available ETH</Text>
-                    <Text style={styles.detailValueText}>${ethBalance.toFixed(2)}</Text>
-                  </View>
-                )}
-                
-                {tradeMode === 'sell' && selectedToken && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Available {selectedToken.symbol}</Text>
-                    <Text style={styles.detailValueText}>
-                      ${(selectedToken.usdValue || 0).toFixed(2)}
+                  {isLoadingQuote ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : quote && quote.success && quote.routes && quote.routes.length > 0 ? (
+                    <>
+                      <Text style={styles.detailValueText}>
+                        {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
+                      </Text>
+                      <Text style={styles.detailValueSubtext}>
+                        ${quote.routes[0].toAmountUSD?.toFixed(2) || '0.00'}
+                      </Text>
+                    </>
+                  ) : quoteError ? (
+                    <Text style={[styles.detailValueSubtext, { color: theme.colors.destructive }]}>
+                      Failed to get quote
                     </Text>
-                  </View>
-                )}
-              </>
-            ))}
+                  ) : (
+                    <Text style={styles.detailValueSubtext}>
+                      Calculating...
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
           
           {/* Review Button */}

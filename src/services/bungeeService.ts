@@ -45,6 +45,7 @@ export interface BungeeRoute {
   routeId: string;
   fromAmount: string;
   toAmount: string;
+  toAmountUSD: number;
   estimatedGas: string;
   estimatedGasFeesInUsd: number;
   routePath: string[];
@@ -281,6 +282,7 @@ export const getBungeeQuote = async (
           routeId: route.quoteId || route.requestHash || `bungee-${Date.now()}`,
           fromAmount: result.input.amount,
           toAmount: outputAmount,
+          toAmountUSD: route.output?.valueInUsd || 0,
           estimatedGas: route.gasFee?.gasLimit || '200000',
           estimatedGasFeesInUsd: route.gasFee?.feeInUsd || 0.01,
           routePath: route.routeDetails ? [route.routeDetails.name] : ['Bungee Protocol'],
