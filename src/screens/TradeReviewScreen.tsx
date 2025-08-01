@@ -23,7 +23,7 @@ import {
 } from '../services/bungeeService';
 import { executeTrade } from '../services/tradeExecutionService';
 import { VerifiedToken } from '../config/tokens';
-import { TokenWithBalance } from '../services/tokenService';
+import { TokenWithBalance, formatTokenAmount } from '../services/tokenService';
 import { formatEther, parseEther } from 'viem';
 import { useWallet } from '../contexts/WalletContext';
 import { startMonitoring } from '../services/transactionMonitor';
@@ -177,9 +177,28 @@ const TradeReviewScreen: React.FC<Props> = ({ navigation, route }) => {
   }
   
   const quoteDetails = formatQuoteDetails(quote, selectedRoute);
-  const fromAmountFormatted = formatEther(BigInt(amountWei));
-  const toAmountFormatted = formatEther(BigInt(selectedRoute.toAmount));
-  const minAmountFormatted = formatEther(BigInt(selectedRoute.outputAmountMin));
+  
+  // Debug logging
+  console.log('TradeReview Debug:', {
+    selectedRoute: selectedRoute,
+    toAmount: selectedRoute.toAmount,
+    toToken: toToken,
+    toTokenDecimals: toToken.decimals,
+    toTokenPrice: toToken.usdPrice,
+    amountWei: amountWei,
+    fromToken: fromToken
+  });
+  
+  // Format amounts based on token decimals
+  const fromAmountFormatted = formatTokenAmount(amountWei, fromToken.decimals, 6);
+  const toAmountFormatted = formatTokenAmount(selectedRoute.toAmount, toToken.decimals, 6);
+  const minAmountFormatted = formatTokenAmount(selectedRoute.outputAmountMin, toToken.decimals, 6);
+  
+  console.log('Formatted amounts:', {
+    fromAmountFormatted,
+    toAmountFormatted,
+    minAmountFormatted
+  });
   
   return (
     <SafeAreaView style={styles.container}>

@@ -261,30 +261,47 @@ export const getBungeeQuote = async (
     
     // Transform to our expected format
     const transformedResponse: BungeeQuoteResponse = {
-      routes: routes.map((route: any) => ({
-        routeId: route.quoteId || route.requestHash || `bungee-${Date.now()}`,
-        fromAmount: result.input.amount,
-        toAmount: route.output?.amount || '0',
-        estimatedGas: route.gasFee?.gasLimit || '200000',
-        estimatedGasFeesInUsd: route.gasFee?.feeInUsd || 0.01,
-        routePath: route.routeDetails ? [route.routeDetails.name] : ['Bungee Protocol'],
-        exchangeRate: (route.output?.valueInUsd && result.input.valueInUsd) 
-          ? route.output.valueInUsd / result.input.valueInUsd 
-          : 1,
-        priceImpact: 0, // Not provided in response
-        slippage: route.slippage || slippage,
-        bridgeFee: route.routeDetails?.routeFee?.amount || '0',
-        bridgeFeeInUsd: route.routeDetails?.routeFee?.feeInUsd || 0,
-        outputAmountMin: route.output?.minAmountOut || '0',
-        executionDuration: route.estimatedTime || 30,
-        // Store additional data needed for submit
-        approvalData: route.approvalData,
-        txData: route.txData,
-        requestType: route.requestType || 'SINGLE_OUTPUT_REQUEST',
-        userOp: route.userOp,
-        signTypedData: route.signTypedData,
-        quoteExpiry: route.quoteExpiry
-      })),
+      routes: routes.map((route: any) => {
+        // Debug log each route
+        console.log('Mapping route:', JSON.stringify(route, null, 2));
+        
+        // Check different possible locations for output amount
+        const outputAmount = route.output?.amount || route.toAmount || route.outputAmount || '0';
+        const minOutputAmount = route.output?.minAmountOut || route.minAmountOut || '0';
+        
+        console.log('Route mapping - output amounts:', {
+          outputAmount,
+          minOutputAmount,
+          routeOutput: route.output,
+          directToAmount: route.toAmount,
+          directOutputAmount: route.outputAmount
+        });
+        
+        return {
+          routeId: route.quoteId || route.requestHash || `bungee-${Date.now()}`,
+          fromAmount: result.input.amount,
+          toAmount: outputAmount,
+          estimatedGas: route.gasFee?.gasLimit || '200000',
+          estimatedGasFeesInUsd: route.gasFee?.feeInUsd || 0.01,
+          routePath: route.routeDetails ? [route.routeDetails.name] : ['Bungee Protocol'],
+          exchangeRate: (route.output?.valueInUsd && result.input.valueInUsd) 
+            ? route.output.valueInUsd / result.input.valueInUsd 
+            : 1,
+          priceImpact: 0, // Not provided in response
+          slippage: route.slippage || slippage,
+          bridgeFee: route.routeDetails?.routeFee?.amount || '0',
+          bridgeFeeInUsd: route.routeDetails?.routeFee?.feeInUsd || 0,
+          outputAmountMin: minOutputAmount,
+          executionDuration: route.estimatedTime || 30,
+          // Store additional data needed for submit
+          approvalData: route.approvalData,
+          txData: route.txData,
+          requestType: route.requestType || 'SINGLE_OUTPUT_REQUEST',
+          userOp: route.userOp,
+          signTypedData: route.signTypedData,
+          quoteExpiry: route.quoteExpiry
+        };
+      }),
       fromToken: {
         address: result.input.token.address,
         symbol: result.input.token.symbol,
