@@ -226,6 +226,16 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
         );
         
         setQuote(quoteResponse);
+        
+        // Debug log the quote response
+        if (quoteResponse.routes && quoteResponse.routes.length > 0) {
+          console.log('Quote received:', {
+            toAmount: quoteResponse.routes[0].toAmount,
+            toAmountUSD: quoteResponse.routes[0].toAmountUSD,
+            toToken: quoteResponse.routes[0].toToken,
+            decimals: quoteResponse.routes[0].toToken.decimals
+          });
+        }
       } catch (error) {
         console.error('Failed to fetch quote:', error);
         setQuoteError('Failed to get quote');
@@ -589,7 +599,7 @@ const TradeScreen: React.FC<Props> = ({ navigation }) => {
                         {formatAmount(quote.routes[0].toAmount, quote.routes[0].toToken.decimals, 6)} {quote.routes[0].toToken.symbol}
                       </Text>
                       <Text style={styles.detailValueSubtext}>
-                        ${quote.routes[0].toAmountUSD?.toFixed(2) || '0.00'}
+                        ${typeof quote.routes[0].toAmountUSD === 'number' ? quote.routes[0].toAmountUSD.toFixed(2) : '0.00'}
                       </Text>
                     </>
                   ) : quoteError ? (

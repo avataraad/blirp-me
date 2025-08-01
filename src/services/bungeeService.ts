@@ -266,13 +266,15 @@ export const getBungeeQuote = async (
         // Debug log each route
         console.log('Mapping route:', JSON.stringify(route, null, 2));
         
-        // Check different possible locations for output amount
-        const outputAmount = route.output?.amount || route.toAmount || route.outputAmount || '0';
-        const minOutputAmount = route.output?.minAmountOut || route.minAmountOut || '0';
+        // Get output amount and USD value from route.output
+        const outputAmount = route.output?.amount || '0';
+        const outputValueInUsd = route.output?.valueInUsd || 0;
+        const minOutputAmount = route.output?.minAmountOut || '0';
         
         console.log('Route mapping - output amounts:', {
           outputAmount,
           minOutputAmount,
+          outputValueInUsd,
           routeOutput: route.output,
           directToAmount: route.toAmount,
           directOutputAmount: route.outputAmount
@@ -282,7 +284,7 @@ export const getBungeeQuote = async (
           routeId: route.quoteId || route.requestHash || `bungee-${Date.now()}`,
           fromAmount: result.input.amount,
           toAmount: outputAmount,
-          toAmountUSD: route.output?.valueInUsd || 0,
+          toAmountUSD: outputValueInUsd,
           estimatedGas: route.gasFee?.gasLimit || '200000',
           estimatedGasFeesInUsd: route.gasFee?.feeInUsd || 0.01,
           routePath: route.routeDetails ? [route.routeDetails.name] : ['Bungee Protocol'],
