@@ -6,6 +6,7 @@ export type RootStackParamList = {
     PhoneVerification: { phoneNumber: string; e164PhoneNumber: string };
     CreateWallet: undefined;
     CreateWalletTag: { phoneNumber: string; e164PhoneNumber: string };
+    CreatePortoWallet: undefined;
     SignIn: undefined;
     MainTabs: undefined;
     SupabaseTest: undefined;

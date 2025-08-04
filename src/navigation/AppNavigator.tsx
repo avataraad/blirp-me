@@ -9,6 +9,7 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import PhoneNumberScreen from '../screens/PhoneNumberScreen';
 import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
 import CreateWalletScreen from '../screens/CreateWalletScreen';
+import CreatePortoWalletScreen from '../screens/CreatePortoWalletScreen';
 import SignInScreen from '../screens/SignInScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ReceiveScreen from '../screens/ReceiveScreen';
@@ -128,6 +129,11 @@ const AppNavigator = () => {
           name="CreateWalletTag"
           component={CreateWalletScreen}
           options={{ title: 'Choose Tag' }}
+        />
+        <Stack.Screen
+          name="CreatePortoWallet"
+          component={CreatePortoWalletScreen}
+          options={{ title: 'Porto Smart Wallet' }}
         />
         <Stack.Screen
           name="SignIn"
