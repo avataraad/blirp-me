@@ -1,351 +1,287 @@
 /**
- * Porto Smart Wallet Service
- * Uses Porto SDK with RPC server mode for React Native
- * Integrates with existing passkey system for authentication
+ * Porto Smart Wallet Service - RPC Implementation
+ * Direct RPC communication to bypass SDK browser dependencies
+ * Uses ephemeral key pattern for secure wallet creation
  */
 
-import { Porto, Mode, Key } from 'porto';
-import { base } from 'viem/chains';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Passkey } from 'react-native-passkey';
-import { Account as PortoAccount } from 'porto/viem';
+import { PortoRpcClient } from './portoRpcClient';
+import { PortoAccountService } from './portoAccountService';
+import { PortoTransactionService } from './portoTransactionService';
+import { PortoRecoveryService } from './portoRecoveryService';
+import { PasskeyManager } from './passkeyManager';
 
-// USDC token address on Base mainnet
-const USDC_BASE_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+interface PortoWallet {
+  address: string;
+  tag: string;
+  type: 'porto';
+  passkeyId?: string;
+  chainId?: number;
+}
 
-// Custom storage adapter for React Native using AsyncStorage
-const portoStorage = {
-  async get(key: string): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(`porto_${key}`);
-    } catch (error) {
-      console.error('Porto storage get error:', error);
-      return null;
-    }
-  },
-  
-  async set(key: string, value: string): Promise<void> {
-    try {
-      await AsyncStorage.setItem(`porto_${key}`, value);
-    } catch (error) {
-      console.error('Porto storage set error:', error);
-    }
-  },
-  
-  async delete(key: string): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(`porto_${key}`);
-    } catch (error) {
-      console.error('Porto storage delete error:', error);
-    }
-  }
-};
-
-// Custom WebAuthn creation function using React Native Passkey
-const createWebAuthnCredential = async (options: any) => {
-  try {
-    // Use React Native Passkey library to create credential
-    const result = await Passkey.create({
-      rpId: 'blirp.me',
-      rpName: 'BlirpMe',
-      userName: options.user?.name || 'BlirpMe User',
-      userDisplayName: options.user?.displayName || 'BlirpMe User',
-      userId: options.user?.id || crypto.randomUUID(),
-      challenge: options.challenge,
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        residentKey: 'required',
-        userVerification: 'required'
-      },
-      attestation: 'none',
-      pubKeyCredParams: [
-        { alg: -7, type: 'public-key' }, // ES256
-      ],
-    });
-    
-    return {
-      id: result.id,
-      rawId: result.rawId,
-      response: {
-        clientDataJSON: result.response.clientDataJSON,
-        attestationObject: result.response.attestationObject,
-      },
-      type: 'public-key'
-    };
-  } catch (error) {
-    console.error('Passkey creation error:', error);
-    throw error;
-  }
-};
-
-// Custom WebAuthn sign function using React Native Passkey
-const signWithWebAuthn = async (options: any) => {
-  try {
-    const result = await Passkey.get({
-      rpId: 'blirp.me',
-      challenge: options.challenge,
-      userVerification: 'required',
-      allowCredentials: options.allowCredentials
-    });
-    
-    return {
-      id: result.id,
-      rawId: result.rawId,
-      response: {
-        clientDataJSON: result.response.clientDataJSON,
-        authenticatorData: result.response.authenticatorData,
-        signature: result.response.signature,
-        userHandle: result.response.userHandle,
-      },
-      type: 'public-key'
-    };
-  } catch (error) {
-    console.error('Passkey signing error:', error);
-    throw error;
-  }
-};
-
-class PortoWalletService {
-  private porto: any = null;
+export class PortoWalletService {
+  private rpcClient: PortoRpcClient;
+  private accountService: PortoAccountService;
+  private transactionService: PortoTransactionService;
+  private recoveryService: PortoRecoveryService;
   private currentAccount: any = null;
-  
-  /**
-   * Initialize Porto with RPC server mode for React Native
-   */
-  async initialize() {
-    if (this.porto) return;
-    
-    try {
-      console.log('Initializing Porto SDK with RPC server mode...');
-      
-      // Create Porto instance with RPC server mode
-      // This is the recommended approach for React Native
-      this.porto = Porto.create({
-        mode: Mode.rpcServer({
-          keystoreHost: 'blirp.me', // Your app's domain
-        }),
-        storage: portoStorage,
-        chains: [base],
-        feeToken: USDC_BASE_ADDRESS, // Use USDC for gas payments
-      });
-      
-      console.log('Porto SDK initialized successfully');
-    } catch (error) {
-      console.error('Porto initialization error:', error);
-      throw error;
-    }
+
+  constructor() {
+    this.rpcClient = new PortoRpcClient();
+    this.accountService = new PortoAccountService();
+    this.transactionService = new PortoTransactionService();
+    this.recoveryService = new PortoRecoveryService();
   }
-  
+
   /**
-   * Create a new Porto smart wallet with passkey
+   * Initialize the service
    */
-  async createPortoWallet(tag: string): Promise<{
-    address: string;
-    tag: string;
-    type: 'porto';
-  }> {
-    await this.initialize();
-    
+  async initialize(): Promise<void> {
     try {
-      console.log('Creating Porto wallet for tag:', tag);
-      
-      // Step 1: Create a passkey with our custom WebAuthn function
-      const userId = new TextEncoder().encode(tag);
-      const passkey = await Key.createWebAuthnP256({
-        label: `${tag}'s Porto Wallet`,
-        userId,
-        createFn: createWebAuthnCredential, // Use our React Native implementation
-      });
-      
-      console.log('Passkey created successfully');
-      
-      // Step 2: Connect and create account in one step using wallet_connect
-      const result = await this.porto.provider.request({
-        method: 'wallet_connect',
-        params: [{
-          capabilities: {
-            createAccount: true,
-            email: false, // We don't need email for now
-            grantAdmins: [passkey], // Use the passkey as admin
-          }
-        }]
-      });
-      
-      console.log('Porto account created:', result);
-      
-      // Store account data
-      const accountData = {
-        address: result.accounts[0].address,
-        tag,
-        type: 'porto' as const,
-        chainId: base.id,
-        createdAt: Date.now(),
-        passkeyId: passkey.id,
-      };
-      
-      await AsyncStorage.setItem(
-        `porto_wallet_${tag}`,
-        JSON.stringify(accountData)
-      );
-      
-      this.currentAccount = accountData;
-      
-      return {
-        address: accountData.address,
-        tag: accountData.tag,
-        type: 'porto',
-      };
-    } catch (error) {
-      console.error('Porto wallet creation error:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Recover Porto wallet using passkey
-   */
-  async recoverPortoWallet(tag: string): Promise<{
-    address: string;
-    tag: string;
-    type: 'porto';
-  } | null> {
-    await this.initialize();
-    
-    try {
-      console.log('Recovering Porto wallet for tag:', tag);
-      
-      // Get stored wallet data
-      const storedData = await AsyncStorage.getItem(`porto_wallet_${tag}`);
-      if (!storedData) {
-        console.log('No Porto wallet found for tag:', tag);
-        return null;
+      // Check if passkeys are available
+      const available = await PasskeyManager.isAvailable();
+      if (!available) {
+        console.warn('Passkeys not available on this device');
       }
       
-      const accountData = JSON.parse(storedData);
-      
-      // Connect with existing account
-      const result = await this.porto.provider.request({
-        method: 'wallet_connect',
-        params: [{
-          capabilities: {
-            selectAccount: {
-              address: accountData.address,
-              key: {
-                credentialId: accountData.passkeyId,
-              }
-            }
-          }
-        }]
-      });
-      
-      console.log('Porto wallet recovered:', result);
-      
-      this.currentAccount = accountData;
-      
-      return {
-        address: accountData.address,
-        tag: accountData.tag,
-        type: 'porto',
-      };
+      // Load active account if exists
+      const activeAccount = await this.accountService.getActiveAccount();
+      if (activeAccount) {
+        this.currentAccount = activeAccount;
+        console.log('Porto service initialized with account:', activeAccount.address);
+      }
     } catch (error) {
-      console.error('Porto wallet recovery error:', error);
-      return null;
+      console.error('Porto service initialization failed:', error);
     }
   }
-  
+
   /**
-   * Send transaction with Porto wallet
+   * Create new Porto smart wallet
    */
-  async sendTransaction(calls: any[]): Promise<string> {
-    if (!this.currentAccount) {
-      throw new Error('No Porto wallet connected');
-    }
-    
+  async createPortoWallet(tag: string): Promise<PortoWallet> {
     try {
-      console.log('Sending Porto transaction:', calls);
+      // Check if passkeys are available
+      const available = await PasskeyManager.isAvailable();
+      if (!available) {
+        throw new Error('Passkeys not available on this device. iOS 17.0+ required.');
+      }
       
-      // Prepare the transaction
-      const prepared = await this.porto.provider.request({
-        method: 'wallet_prepareCalls',
-        params: [{
-          calls,
-          chainId: `0x${base.id.toString(16)}`,
-          from: this.currentAccount.address,
-          capabilities: {
-            feeToken: USDC_BASE_ADDRESS, // Pay gas in USDC
-          }
-        }]
-      });
+      // Create the smart wallet
+      const wallet = await this.accountService.createSmartWallet(tag);
       
-      console.log('Transaction prepared:', prepared);
+      this.currentAccount = {
+        address: wallet.address,
+        passkeyId: wallet.passkeyId,
+        tag,
+        chainId: wallet.chainId
+      };
       
-      // Sign with passkey (will trigger biometric prompt)
-      const signature = await signWithWebAuthn({
-        challenge: prepared.digest,
-        allowCredentials: [{
-          id: this.currentAccount.passkeyId,
-          type: 'public-key'
-        }]
-      });
-      
-      // Execute the transaction
-      const result = await this.porto.provider.request({
-        method: 'wallet_sendPreparedCalls',
-        params: [{
-          ...prepared,
-          signature
-        }]
-      });
-      
-      console.log('Transaction sent:', result);
-      
-      return result.id;
+      return {
+        address: wallet.address,
+        tag,
+        type: 'porto',
+        passkeyId: wallet.passkeyId,
+        chainId: wallet.chainId
+      };
     } catch (error) {
-      console.error('Porto transaction error:', error);
+      console.error('Failed to create Porto wallet:', error);
       throw error;
     }
   }
-  
+
   /**
-   * Get Porto wallet balance
+   * Recover existing Porto wallet
+   */
+  async recoverWallet(tag?: string): Promise<PortoWallet | null> {
+    try {
+      let wallet;
+      
+      if (tag) {
+        // Recover specific wallet by tag
+        wallet = await this.recoveryService.recoverWallet(tag);
+      } else {
+        // Try to recover any wallet
+        wallet = await this.recoveryService.recoverAnyWallet();
+      }
+      
+      if (wallet) {
+        this.currentAccount = wallet;
+        return {
+          address: wallet.address,
+          tag: wallet.tag,
+          type: 'porto',
+          passkeyId: wallet.passkeyId,
+          chainId: wallet.chainId
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Wallet recovery failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Send transaction
+   */
+  async sendTransaction(
+    to: string,
+    value: string,
+    data?: string
+  ): Promise<string> {
+    if (!this.currentAccount) {
+      throw new Error('No wallet connected');
+    }
+    
+    const bundleId = await this.transactionService.sendTransaction(
+      this.currentAccount.address,
+      this.currentAccount.passkeyId,
+      [{ to, value, data }]
+    );
+    
+    return bundleId;
+  }
+
+  /**
+   * Send multiple transactions (batch)
+   */
+  async sendBatchTransaction(
+    calls: Array<{ to: string; value?: string; data?: string }>
+  ): Promise<string> {
+    if (!this.currentAccount) {
+      throw new Error('No wallet connected');
+    }
+    
+    const bundleId = await this.transactionService.sendTransaction(
+      this.currentAccount.address,
+      this.currentAccount.passkeyId,
+      calls
+    );
+    
+    return bundleId;
+  }
+
+  /**
+   * Estimate gas for transaction
+   */
+  async estimateGas(
+    to: string,
+    value: string,
+    data?: string
+  ): Promise<{ gasAmount: string; feeAmount: string; feeToken: string }> {
+    if (!this.currentAccount) {
+      throw new Error('No wallet connected');
+    }
+    
+    return await this.transactionService.estimateGas(
+      this.currentAccount.address,
+      [{ to, value, data }]
+    );
+  }
+
+  /**
+   * Get transaction status
+   */
+  async getTransactionStatus(bundleId: string): Promise<{
+    status: 'pending' | 'success' | 'failed';
+    transactionHash?: string;
+    error?: string;
+  }> {
+    return await this.transactionService.getTransactionStatus(bundleId);
+  }
+
+  /**
+   * Wait for transaction confirmation
+   */
+  async waitForTransaction(bundleId: string): Promise<{
+    status: 'pending' | 'success' | 'failed';
+    transactionHash?: string;
+    error?: string;
+  }> {
+    return await this.transactionService.waitForTransaction(bundleId);
+  }
+
+  /**
+   * Get current wallet
+   */
+  getCurrentWallet(): PortoWallet | null {
+    if (!this.currentAccount) return null;
+    
+    return {
+      address: this.currentAccount.address,
+      tag: this.currentAccount.tag,
+      type: 'porto',
+      passkeyId: this.currentAccount.passkeyId,
+      chainId: this.currentAccount.chainId
+    };
+  }
+
+  /**
+   * Sign out (clear current account)
+   */
+  async signOut(): Promise<void> {
+    this.currentAccount = null;
+    await AsyncStorage.removeItem('porto_active_account');
+  }
+
+  /**
+   * Check if Porto wallets exist on device
+   */
+  async hasStoredWallets(): Promise<boolean> {
+    return await this.recoveryService.hasStoredWallets();
+  }
+
+  /**
+   * List all accounts
+   */
+  async listAccounts(): Promise<PortoWallet[]> {
+    const accounts = await this.accountService.listAccounts();
+    return accounts.map(acc => ({
+      address: acc.address,
+      tag: acc.tag,
+      type: 'porto' as const,
+      passkeyId: acc.passkeyId,
+      chainId: acc.chainId
+    }));
+  }
+
+  /**
+   * Switch to a different account
+   */
+  async switchAccount(tag: string): Promise<boolean> {
+    const account = await this.accountService.getAccountData(tag);
+    if (account) {
+      this.currentAccount = account;
+      await AsyncStorage.setItem('porto_active_account', tag);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if passkeys are available
+   */
+  async isAvailable(): Promise<boolean> {
+    return await PasskeyManager.isAvailable();
+  }
+
+  /**
+   * Get wallet balance (placeholder - integrate with existing balance service)
    */
   async getBalance(address: string): Promise<{
     eth: string;
     usdc: string;
   }> {
-    // This would use viem to get balances
+    // This would use viem or your existing balance service
     // For now, return mock data
     return {
       eth: '0',
       usdc: '0'
     };
   }
-  
-  /**
-   * Grant session permissions for smoother UX
-   */
-  async grantSessionPermissions(permissions: any, expiry: number) {
-    if (!this.currentAccount) {
-      throw new Error('No Porto wallet connected');
-    }
-    
-    try {
-      const result = await this.porto.provider.request({
-        method: 'wallet_grantPermissions',
-        params: [{
-          address: this.currentAccount.address,
-          permissions,
-          expiry,
-        }]
-      });
-      
-      console.log('Permissions granted:', result);
-      return result;
-    } catch (error) {
-      console.error('Permission grant error:', error);
-      throw error;
-    }
-  }
 }
 
-export default new PortoWalletService();
+// Export singleton instance
+const portoService = new PortoWalletService();
+export default portoService;

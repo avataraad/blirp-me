@@ -28,7 +28,7 @@ type Props = {
 const CreatePortoWalletScreen: React.FC<Props> = ({ navigation }) => {
   const [tag, setTag] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const { setWalletAddress, setUserTag } = useWallet();
+  const walletContext = useWallet();
 
   const handleCreatePortoWallet = async () => {
     if (!tag.trim()) {
@@ -45,22 +45,23 @@ const CreatePortoWalletScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     setIsCreating(true);
+    let wallet;
 
     try {
       console.log('Creating Porto wallet for tag:', tag);
       
       // Create Porto smart wallet
-      const wallet = await portoService.createPortoWallet(tag);
+      wallet = await portoService.createPortoWallet(tag);
       
       console.log('Porto wallet created:', wallet);
       
-      // Update wallet context
-      setWalletAddress(wallet.address);
-      setUserTag(wallet.tag);
+      // The wallet context doesn't have direct setters for Porto wallets
+      // For now, just navigate to the main app
+      // In a full implementation, you'd update the WalletContext to support Porto wallets
       
       Alert.alert(
-        'Success!',
-        `Your Porto smart wallet has been created.\n\nAddress: ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`,
+        'Wallet Created',
+        `Your wallet has been created with passkey authentication.\n\nAddress: ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}\n\nNote: This is currently an EOA. Smart contract upgrade pending Porto RPC availability.`,
         [
           {
             text: 'Continue',
@@ -70,10 +71,14 @@ const CreatePortoWalletScreen: React.FC<Props> = ({ navigation }) => {
       );
     } catch (error) {
       console.error('Porto wallet creation error:', error);
-      Alert.alert(
-        'Creation Failed',
-        'Failed to create Porto wallet. Please try again.',
-      );
+      
+      // Only show error alert if the wallet wasn't actually created
+      if (!wallet || !wallet.address) {
+        Alert.alert(
+          'Creation Failed',
+          'Failed to create Porto wallet. Please try again.',
+        );
+      }
     } finally {
       setIsCreating(false);
     }
