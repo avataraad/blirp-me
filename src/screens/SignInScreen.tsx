@@ -1,4 +1,5 @@
 import React from 'react';
+import 'react-native-get-random-values';
 import {
   View,
   Text,
@@ -14,6 +15,10 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useWallet } from '../contexts/WalletContext';
 import { isCloudBackupAvailable } from '../modules/cloudBackup';
 import { restoreFromPasskey } from '../modules/cloudBackup/helpers';
+import { PortoRecoveryService } from '../services/portoRecoveryService';
+import { Passkey } from 'react-native-passkey';
+import { PORTO_CONFIG } from '../config/porto-config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SignInScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -25,9 +30,9 @@ type Props = {
 };
 
 const SignInScreen: React.FC<Props> = ({ navigation }) => {
-  const { restoreFromCloudBackup } = useWallet();
+  const { restoreFromCloudBackup, restorePortoWallet } = useWallet();
 
-  const handleSignIn = async () => {
+  const handleEOASignIn = async () => {
     if (!isCloudBackupAvailable()) {
       Alert.alert(
         'Not Available',
@@ -57,6 +62,117 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handlePortoSignIn = async () => {
+    try {
+      // Check if passkeys are supported
+      const isSupported = await Passkey.isSupported();
+      if (!isSupported) {
+        Alert.alert(
+          'Not Supported',
+          'Passkey authentication is not supported on this device.',
+        );
+        return;
+      }
+
+      // Create a recovery service instance
+      const recoveryService = new PortoRecoveryService();
+      
+      // Check if there are any Porto wallets stored
+      const hasWallets = await recoveryService.hasStoredWallets();
+      if (!hasWallets) {
+        Alert.alert(
+          'No Porto Wallets',
+          'No Porto wallets found on this device. Please create a new wallet first.',
+        );
+        return;
+      }
+
+      // Generate challenge for passkey authentication
+      const challengeBytes = new Uint8Array(32);
+      crypto.getRandomValues(challengeBytes);
+      const challenge = btoa(String.fromCharCode(...Array.from(challengeBytes)));
+
+      try {
+        // First, get all stored Porto accounts to find their credential IDs
+        const keys = await AsyncStorage.getAllKeys();
+        const accountKeys = keys.filter(k => k.startsWith('porto_account_'));
+        
+        if (accountKeys.length === 0) {
+          Alert.alert(
+            'No Porto Wallets',
+            'No Porto wallets found on this device.',
+          );
+          return;
+        }
+
+        // Collect all credential IDs from stored accounts
+        const allowCredentials: Array<{id: string, type: 'public-key'}> = [];
+        const credentialToAccount: Record<string, any> = {};
+        
+        for (const key of accountKeys) {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            const accountData = JSON.parse(data);
+            if (accountData.passkeyId) {
+              allowCredentials.push({
+                id: accountData.passkeyId,
+                type: 'public-key'
+              });
+              credentialToAccount[accountData.passkeyId] = accountData;
+            }
+          }
+        }
+
+        // Now let the user select from their Porto passkeys only
+        // This should trigger Face ID directly without the browser-style prompt
+        const passkeyResult = await Passkey.get({
+          rpId: PORTO_CONFIG.rpId,
+          challenge,
+          userVerification: 'required',
+          allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined
+        });
+
+        console.log('Passkey authentication successful:', passkeyResult.id);
+
+        // Find the account associated with this credential
+        const accountData = credentialToAccount[passkeyResult.id];
+        
+        if (accountData) {
+          // Update the wallet context with Porto wallet data
+          const success = await restorePortoWallet(accountData.address, accountData.tag);
+          
+          if (success) {
+            console.log('Porto wallet restored successfully:', accountData.address);
+            navigation.navigate('MainTabs');
+          } else {
+            Alert.alert(
+              'Recovery Failed',
+              'Could not restore Porto wallet. Please try again.',
+            );
+          }
+        } else {
+          Alert.alert(
+            'Wallet Not Found',
+            'Could not find a Porto wallet associated with this passkey.',
+          );
+        }
+      } catch (passkeyError: any) {
+        if (passkeyError.code === 'NotAllowedError') {
+          console.log('User cancelled passkey selection');
+        } else {
+          console.error('Passkey authentication error:', passkeyError);
+          Alert.alert(
+            'Authentication Failed',
+            'Could not authenticate with passkey. Please try again.',
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Porto sign in error:', error);
+      Alert.alert('Error', 'Failed to sign in with Porto wallet');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -82,10 +198,18 @@ const SignInScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={styles.signInButton}
-            onPress={handleSignIn}
+            onPress={handleEOASignIn}
           >
-            <Icon name="lock-closed-outline" size={20} color={theme.colors.text.inverse} />
-            <Text style={styles.signInButtonText}>Sign In with Passkey</Text>
+            <Icon name="key-outline" size={20} color={theme.colors.text.inverse} />
+            <Text style={styles.signInButtonText}>Sign In with EOA Wallet</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.signInButton, styles.portoButton]}
+            onPress={handlePortoSignIn}
+          >
+            <Icon name="shield-checkmark-outline" size={20} color={theme.colors.primary} />
+            <Text style={[styles.signInButtonText, styles.portoButtonText]}>Sign In with Porto Wallet</Text>
           </TouchableOpacity>
 
           <Text style={styles.footerText}>
@@ -168,6 +292,15 @@ const styles = StyleSheet.create({
     ...theme.typography.footnote,
     color: theme.colors.text.tertiary,
     textAlign: 'center',
+  },
+  portoButton: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    marginTop: theme.spacing.md,
+  },
+  portoButtonText: {
+    color: theme.colors.primary,
   },
 });
 

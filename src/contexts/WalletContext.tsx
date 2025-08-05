@@ -23,6 +23,7 @@ interface WalletContextType {
   createWallet: (tag: string) => Promise<{ success: boolean; wallet?: WalletData }>;
   unlockWallet: (tag: string) => Promise<boolean>;
   restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
+  restorePortoWallet: (address: string, tag: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
   signTransaction: (transaction: TransactionRequest) => Promise<string>;
   logout: () => void;
@@ -259,6 +260,29 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
+  // Restore Porto wallet
+  const restorePortoWallet = async (address: string, tag: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+
+      // For Porto wallets, we don't have a private key
+      // The wallet is a smart contract wallet controlled by passkeys
+      setWalletAddress(address);
+      setWalletTag(tag);
+      setWallet({ address, tag });
+
+      // Refresh balance
+      await refreshBalance();
+
+      return true;
+    } catch (error) {
+      console.error('Error restoring Porto wallet:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Restore wallet from cloud backup
   const restoreFromCloudBackup = async (tag: string, privateKey?: string): Promise<boolean> => {
     try {
@@ -358,6 +382,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         createWallet,
         unlockWallet,
         restoreFromCloudBackup,
+        restorePortoWallet,
         refreshBalance,
         signTransaction,
         logout,

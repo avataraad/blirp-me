@@ -3,6 +3,14 @@
 ## Overview
 This document outlines the implementation of Porto smart wallets in React Native using direct RPC server communication, bypassing the browser-dependent Porto SDK. This approach maintains all Porto benefits (no seed phrases, passkey authentication, USDC gas payments) while avoiding browser API dependencies.
 
+## Implementation Summary
+We successfully implemented Porto smart wallets in React Native after encountering and solving several challenges:
+1. Porto SDK had browser dependencies (import.meta, stream module) incompatible with React Native/Hermes
+2. Switched to direct RPC server communication approach
+3. Fixed CBOR parsing issues by using `borc` library instead of `cbor-js` or `cbor-x`
+4. Discovered correct RPC request structures through trial and error
+5. Successfully created counterfactual smart wallets on Base mainnet
+
 ## Architecture Overview
 
 ### Why RPC Server Approach?
@@ -19,22 +27,59 @@ This document outlines the implementation of Porto smart wallets in React Native
 
 ## RPC Endpoints
 
-### Base Configuration
+### Base Configuration (WORKING)
 ```typescript
 const PORTO_RPC_ENDPOINTS = {
-  mainnet: 'https://base.rpc.ithaca.xyz',        // Base Mainnet
-  testnet: 'https://base-sepolia.rpc.ithaca.xyz', // Base Sepolia (recommended for development)
-  development: 'https://porto-dev.rpc.ithaca.xyz',
-  local: 'http://localhost:9200'
+  mainnet: 'https://base-mainnet.rpc.ithaca.xyz', // Base Mainnet (NOTE: needs -mainnet suffix!)
+  testnet: 'https://base-sepolia.rpc.ithaca.xyz', // Base Sepolia
 };
 
 const PORTO_CONFIG = {
   chainId: 8453,  // Base Mainnet
   testnetChainId: 84532,  // Base Sepolia
   usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-  delegationContract: '0x...',  // Porto's delegation contract (get from Porto team)
+  delegationContract: '0x623b5b44647871268d481d2930f60d5d7f37a1fe', // Base Sepolia
+  mainnetDelegationContract: '0x664ab8c20b629422f5398e58ff8989e68b26a4e6', // Base Mainnet
 };
 ```
+
+### Critical Implementation Details We Discovered
+
+#### 1. CBOR Library Choice Matters
+- ❌ `cbor-x` - Has Node.js dependencies (stream module), fails in React Native
+- ❌ `cbor-js` - Has issues with DataView operations in React Native
+- ✅ `borc` - Works perfectly in React Native, handles Buffer/ArrayBuffer correctly
+
+#### 2. Correct RPC Request Structures
+```typescript
+// wallet_getCapabilities - MUST use array of arrays!
+const capabilities = await rpcClient.request('wallet_getCapabilities', [[8453]]);
+// NOT: [8453] or ["0x2105"] - these will fail!
+
+// wallet_prepareUpgradeAccount - key fields must be at top level
+const params = {
+  address: "0x...",
+  chainId: 8453,
+  delegation: delegationContract, // Required - cannot omit!
+  capabilities: {
+    authorizeKeys: [{
+      type: "webauthnp256",
+      role: "admin",
+      publicKey: "0x...", // 64 bytes hex (32 bytes X + 32 bytes Y)
+      permissions: []
+    }]
+    // NOT: { key: { type, role, publicKey }, permissions: [] }
+  }
+};
+
+// wallet_upgradeAccount returns null on success!
+// The smart wallet address is the same as the EOA address
+```
+
+#### 3. Signature Verification
+- Must use raw digest signing (no Ethereum message prefix)
+- Use viem's `account.sign({ hash })` NOT `account.signMessage()`
+- Porto validates signatures against the ephemeral EOA address
 
 ## Core Implementation
 
@@ -158,6 +203,25 @@ class EphemeralKeyManager {
 
 ### 3. WebAuthn/Passkey Integration
 Integrate with existing React Native passkey system:
+
+#### CRITICAL: Public Key Extraction
+Porto expects the raw P-256 public key coordinates, NOT the attestationObject or credentialId!
+
+```typescript
+// The passkey creation returns an attestationObject that contains the public key
+const result = await Passkey.create(createRequest);
+
+// Must extract the public key from the attestationObject:
+// 1. Base64 decode the attestationObject
+// 2. CBOR decode it
+// 3. Parse the authData structure
+// 4. Extract the credential public key (COSE format)
+// 5. Get the x and y coordinates (-2 and -3 in COSE key map)
+// 6. Combine as: 0x + xHex (32 bytes) + yHex (32 bytes)
+
+// Example working public key format:
+// 0xe47d158a3fab40a4e92750dc26eab5ea3b84c3e65d2a1a076c3f984197e988852b22858b5445a3bd139d71ecc35e7755d155d2bbc620c4e8dd79c1a09d93a50a
+```
 
 ```typescript
 import { Passkey } from 'react-native-passkey';
@@ -843,6 +907,36 @@ class PortoOptimizations {
 - [ ] Test with real USDC on mainnet
 - [ ] Implement session key rotation
 
+## Common Issues and Solutions
+
+### 1. "Export namespace" Build Error
+- **Cause**: Porto SDK browser dependencies
+- **Solution**: Use RPC server approach, not the SDK
+
+### 2. "stream module not found"
+- **Cause**: cbor-x has Node.js dependencies
+- **Solution**: Use `borc` instead
+
+### 3. "Invalid params - expected a sequence"
+- **Cause**: Wrong parameter format for wallet_getCapabilities
+- **Solution**: Use `[[chainId]]` not `[chainId]` or `["0x..."]`
+
+### 4. "missing field `type`"
+- **Cause**: Nested key structure in authorizeKeys
+- **Solution**: Put type, role, publicKey at top level of array items
+
+### 5. "invalid delegation"
+- **Cause**: Wrong delegation contract address
+- **Solution**: Use server-provided address from capabilities or the documented addresses above
+
+### 6. "invalid auth item" Signature Error
+- **Cause**: Using signMessage which adds Ethereum prefix
+- **Solution**: Use `account.sign({ hash })` for raw digest signing
+
+### 7. "Cannot read property 'address' of null"
+- **Cause**: wallet_upgradeAccount returns null on success
+- **Solution**: Use the EOA address as the smart wallet address
+
 ## Summary
 
 The RPC server approach provides a clean path to integrate Porto smart wallets into React Native without browser dependencies. Key benefits:
@@ -851,6 +945,6 @@ The RPC server approach provides a clean path to integrate Porto smart wallets i
 2. **Full Native Control**: Complete control over UX
 3. **Same Security Model**: Passkey-based, no seed phrases
 4. **All Porto Features**: Account abstraction, USDC gas, cross-chain support
-5. **Production Ready**: Used by Porto's own infrastructure
+5. **Production Ready**: Successfully tested on Base mainnet
 
-The ephemeral key pattern ensures users never see or manage private keys while getting instant smart wallet creation with passkey security.
+The implementation creates counterfactual smart wallets that deploy on first use, with the same address as the ephemeral EOA used during creation.

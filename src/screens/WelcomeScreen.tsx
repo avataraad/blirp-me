@@ -41,34 +41,9 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('CreatePortoWallet');
   };
 
-  const handleSignIn = async () => {
-    if (!isCloudBackupAvailable()) {
-      Alert.alert(
-        'Not Available',
-        'Cloud backup requires iOS 17.0 or later.',
-      );
-      return;
-    }
-
-    try {
-      // Get both private key and tag from passkey
-      const { tag, privateKey } = await restoreFromPasskey();
-
-      // Restore the wallet with the retrieved tag and private key
-      const success = await restoreFromCloudBackup(tag, privateKey);
-
-      if (success) {
-        navigation.navigate('MainTabs');
-      } else {
-        Alert.alert(
-          'Restore Failed',
-          'Could not restore wallet. Please try again.'
-        );
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      Alert.alert('Error', 'Failed to sign in with passkey');
-    }
+  const handleSignIn = () => {
+    // Navigate to SignInScreen where users can choose EOA or Porto wallet
+    navigation.navigate('SignIn');
   };
 
   return (
