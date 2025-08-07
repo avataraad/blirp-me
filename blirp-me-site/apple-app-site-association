@@ -2,7 +2,9 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["25GGA9M3A7.me.blirp.app"],
+        "appIDs": [
+          "25GGA9M3A7.me.blirp.app"
+        ],
         "components": [
           {
             "/": "*",
@@ -13,7 +15,10 @@
     ]
   },
   "webcredentials": {
-    "apps": ["25GGA9M3A7.me.blirp.app"]
+    "apps": [
+      "25GGA9M3A7.me.blirp.app",
+      "95ZL7LM493.com.avataraad.react-native-expo"
+    ]
   },
   "appclips": {
     "apps": []
