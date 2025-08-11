@@ -25,6 +25,7 @@
     "axios": "^1.10.0",
     "borc": "^3.0.0",
     "buffer": "^6.0.3",
+    "cbor-x": "^1.6.0",
     "event-target-polyfill": "^0.0.4",
     "porto": "^0.0.60",
     "process": "^0.11.10",
