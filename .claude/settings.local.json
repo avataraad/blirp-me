@@ -34,7 +34,8 @@
       "Bash(npx react-native start:*)",
       "Bash(npm search:*)",
       "Bash(pkill:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

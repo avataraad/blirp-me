@@ -313,12 +313,28 @@ export class PasskeyManager {
     
     if (result.response?.attestationObject) {
       try {
-        // Use the new CBOR-X parser that works in React Native
+        // Debug: Check if the function is available
+        console.log('Type of extractPublicKeyFromAttestationObject:', typeof extractPublicKeyFromAttestationObject);
+        
+        if (typeof extractPublicKeyFromAttestationObject !== 'function') {
+          // Try requiring the module directly here as a fallback
+          const webauthnParser = require('./webauthnCborParser');
+          console.log('Loaded webauthnParser module:', Object.keys(webauthnParser));
+          const publicKeyHex = webauthnParser.extractPublicKeyFromAttestationObject(result.response.attestationObject);
+          console.log('Successfully extracted public key (via require):', publicKeyHex.substring(0, 20) + '...');
+          return publicKeyHex;
+        }
+        
+        // Use the imported function
         const publicKeyHex = extractPublicKeyFromAttestationObject(result.response.attestationObject);
         console.log('Successfully extracted public key:', publicKeyHex.substring(0, 20) + '...');
         return publicKeyHex;
       } catch (error) {
         console.error('Failed to extract public key, using fallback:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack
+        });
       }
     }
     

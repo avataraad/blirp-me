@@ -3,7 +3,7 @@
  * Uses borc library which works perfectly in React Native
  */
 
-import * as borc from 'borc';
+const borc = require('borc');
 import { Buffer } from 'buffer';
 
 /**
@@ -92,23 +92,31 @@ export function extractPublicKeyFromAttestationObject(attestationObjectBase64: s
     
     // Check if it's a Map or plain object
     let x, y;
-    if (coseKey instanceof Map) {
-      // cbor-x returns Map objects
+    
+    // borc returns a Map object, but Map might not be available in all environments
+    // Try multiple approaches to extract the coordinates
+    if (typeof coseKey.get === 'function') {
+      // It's a Map-like object
+      console.log('COSE Key is a Map-like object');
       x = coseKey.get(-2);
       y = coseKey.get(-3);
       
       // Debug: log all keys in the Map
       console.log('COSE Key Map entries:');
-      coseKey.forEach((value, key) => {
-        console.log(`  Key ${key}:`, value);
-      });
+      if (typeof coseKey.forEach === 'function') {
+        coseKey.forEach((value: any, key: any) => {
+          console.log(`  Key ${key}:`, value);
+        });
+      }
     } else if (typeof coseKey === 'object' && coseKey !== null) {
-      // Plain object
-      x = coseKey[-2];
-      y = coseKey[-3];
+      // Plain object - try both negative number keys and string keys
+      console.log('COSE Key is a plain object');
+      x = coseKey[-2] || coseKey['-2'];
+      y = coseKey[-3] || coseKey['-3'];
       
       // Debug: log all keys in the object
       console.log('COSE Key object keys:', Object.keys(coseKey));
+      console.log('COSE Key contents:', JSON.stringify(coseKey, null, 2));
     }
     
     if (!x || !y) {
