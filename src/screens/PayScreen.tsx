@@ -16,7 +16,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from '../types/navigation';
 import { theme } from '../styles/theme';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { isAddress, parseEther, formatEther } from 'viem';
+import { isAddress, parseEther, formatEther, parseUnits } from 'viem';
 import {
   simulateTransaction,
   executeTransaction,
@@ -31,6 +31,9 @@ import { getAddress } from 'viem';
 import { getBalance } from '@wagmi/core';
 import { config } from '../config/wagmi';
 import { SupportedChainId, CHAIN_NAMES } from '../config/chains';
+import usdcService from '../services/usdcService';
+import { PortoTransactionService } from '../services/portoTransactionService';
+import walletService from '../services/walletService';
 
 type PayScreenNavigationProp = BottomTabNavigationProp<
   MainTabParamList,
@@ -42,7 +45,7 @@ type Props = {
 };
 
 const PayScreen: React.FC<Props> = ({ navigation }) => {
-  const { walletAddress: contextWalletAddress, wallet } = useWallet();
+  const { walletAddress: contextWalletAddress, wallet, walletType, usdcBalance } = useWallet();
   const { enabledChains } = useSettings();
   
   const [recipient, setRecipient] = useState('');
@@ -330,6 +333,15 @@ const PayScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
     
+    // Branch based on wallet type
+    if (walletType === 'Porto') {
+      await handlePortoPayment();
+    } else {
+      await handleEOAPayment();
+    }
+  };
+
+  const handleEOAPayment = async () => {
     // Convert USD to ETH for the transaction
     const ethAmount = parseFloat(amountUSD) / ethPrice;
 
@@ -378,6 +390,124 @@ This action requires biometric authentication.`;
         },
       ]
     );
+  };
+
+  const handlePortoPayment = async () => {
+    if (!resolvedAddress || !walletAddress || !wallet?.passkeyId) {
+      Alert.alert('Error', 'Porto wallet not properly configured');
+      return;
+    }
+
+    // Check USDC balance for gas
+    const hasUSDC = await usdcService.hasEnoughUSDCForGas(walletAddress, '0.10');
+    if (!hasUSDC) {
+      Alert.alert(
+        'Insufficient USDC',
+        'You need at least $0.10 USDC for gas fees. Please add USDC to your wallet.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const recipientDisplay = resolvedDisplayName 
+      ? `@${recipient} (${resolvedDisplayName})`
+      : recipient.startsWith('0x') 
+        ? `${recipient.slice(0, 6)}...${recipient.slice(-4)}`
+        : `@${recipient}`;
+
+    const confirmMessage = `
+Send $${amountUSD} USDC to ${recipientDisplay}
+Network: Base
+
+Amount: ${amountUSD} USDC
+Gas Fee: ~$0.05 USDC (estimated)
+Total: ~$${(parseFloat(amountUSD) + 0.05).toFixed(2)} USDC
+
+✨ Porto Wallet Benefits:
+• Gas paid in USDC (no ETH needed)
+• Passkey authentication (Face ID/Touch ID)
+• Smart contract security
+
+This will require Face ID/Touch ID authentication.`;
+
+    Alert.alert(
+      'Confirm Porto Transaction',
+      confirmMessage,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send with Porto',
+          style: 'default',
+          onPress: executePortoTransactionHandler,
+        },
+      ]
+    );
+  };
+
+  const executePortoTransactionHandler = async () => {
+    if (!resolvedAddress || !walletAddress || !wallet?.passkeyId) {
+      Alert.alert('Error', 'Porto wallet not properly configured');
+      return;
+    }
+
+    try {
+      setIsExecuting(true);
+
+      // Convert USD to USDC units (6 decimals)
+      const amountInUSDC = parseUnits(amountUSD, 6);
+      
+      // Prepare transaction calls for Porto
+      const portoService = new PortoTransactionService();
+      
+      // USDC transfer call
+      const calls = [{
+        to: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+        data: `0xa9059cbb${resolvedAddress.slice(2).padStart(64, '0')}${amountInUSDC.toString(16).padStart(64, '0')}`, // transfer(recipient, amount)
+        value: '0x0'
+      }];
+
+      console.log('Sending Porto transaction:', {
+        from: walletAddress,
+        to: resolvedAddress,
+        amount: amountUSD,
+        passkeyId: wallet.passkeyId
+      });
+
+      // Execute Porto transaction (will trigger Face ID/Touch ID)
+      const bundleId = await portoService.sendTransaction(
+        walletAddress,
+        wallet.passkeyId,
+        calls
+      );
+
+      console.log('Porto transaction sent, bundle ID:', bundleId);
+
+      // Show success with bundle ID
+      Alert.alert(
+        'Transaction Sent! 🎉',
+        `Your Porto transaction is being processed.\n\nBundle ID: ${bundleId.slice(0, 8)}...`,
+        [
+          {
+            text: 'Done',
+            onPress: () => {
+              setRecipient('');
+              setAmountUSD('');
+              setResolvedAddress(null);
+              setResolvedDisplayName(null);
+              navigation.navigate('Home');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Porto transaction error:', error);
+      Alert.alert(
+        'Transaction Failed',
+        error instanceof Error ? error.message : 'Failed to send transaction. Please try again.'
+      );
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const executeTransactionHandler = async () => {

@@ -19,6 +19,7 @@ const config = {
     // Ensure buffer polyfill is available globally
     extraNodeModules: {
       buffer: require.resolve('buffer'),
+      stream: require.resolve('readable-stream'),
     },
   },
 };

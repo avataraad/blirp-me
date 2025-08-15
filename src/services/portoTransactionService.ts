@@ -50,7 +50,7 @@ export class PortoTransactionService {
       });
       
       // Phase 2: Sign with passkey (triggers biometric authentication)
-      const signature = await PasskeyManager.signWithPasskey(
+      const { signature } = await PasskeyManager.signPortoTransaction(
         passkeyId,
         prepareResult.digest
       );

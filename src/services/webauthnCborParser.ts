@@ -1,9 +1,9 @@
 /**
  * WebAuthn CBOR Parser for React Native
- * Uses cbor-x library which is compatible with React Native environment
+ * Uses borc library which works perfectly in React Native
  */
 
-import { decode } from 'cbor-x';
+import * as borc from 'borc';
 import { Buffer } from 'buffer';
 
 /**
@@ -17,8 +17,8 @@ export function extractPublicKeyFromAttestationObject(attestationObjectBase64: s
     // Decode base64 to buffer
     const attestationObjectBytes = Buffer.from(attestationObjectBase64, 'base64');
     
-    // CBOR decode using cbor-x
-    const attestationObject = decode(attestationObjectBytes);
+    // CBOR decode using borc (proven to work in React Native)
+    const attestationObject = borc.decodeFirst(attestationObjectBytes);
     
     console.log('Decoded attestationObject:', {
       fmt: attestationObject.fmt,
@@ -78,7 +78,7 @@ export function extractPublicKeyFromAttestationObject(attestationObjectBase64: s
     // Now we're at the credentialPublicKey (COSE key)
     // Extract the remaining bytes and decode as CBOR
     const publicKeyBytes = authData.slice(offset);
-    const coseKey = decode(publicKeyBytes);
+    const coseKey = borc.decodeFirst(publicKeyBytes);
     
     console.log('COSE Key decoded, type:', typeof coseKey);
     console.log('COSE Key structure:', coseKey);
@@ -167,7 +167,7 @@ export function extractCredentialIdFromAttestationObject(attestationObjectBase64
     console.log('CBOR-X Parser: Extracting credential ID...');
     
     const attestationObjectBytes = Buffer.from(attestationObjectBase64, 'base64');
-    const attestationObject = decode(attestationObjectBytes);
+    const attestationObject = borc.decodeFirst(attestationObjectBytes);
     
     const authData = attestationObject.authData;
     if (!authData) {
