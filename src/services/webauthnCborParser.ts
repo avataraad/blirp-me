@@ -4,13 +4,13 @@
  */
 
 const borc = require('borc');
-import { Buffer } from 'buffer';
+const { Buffer } = require('buffer');
 
 /**
  * Extract P-256 public key coordinates from WebAuthn attestationObject
  * Returns hex string in format: 0x + x-coordinate + y-coordinate
  */
-export function extractPublicKeyFromAttestationObject(attestationObjectBase64: string): string {
+function extractPublicKeyFromAttestationObject(attestationObjectBase64: string): string {
   try {
     console.log('CBOR-X Parser: Extracting public key from attestationObject...');
     
@@ -170,7 +170,7 @@ export function extractPublicKeyFromAttestationObject(attestationObjectBase64: s
  * Extract credential ID from attestationObject
  * Returns base64url encoded credential ID
  */
-export function extractCredentialIdFromAttestationObject(attestationObjectBase64: string): string {
+function extractCredentialIdFromAttestationObject(attestationObjectBase64: string): string {
   try {
     console.log('CBOR-X Parser: Extracting credential ID...');
     
@@ -215,7 +215,7 @@ export function extractCredentialIdFromAttestationObject(attestationObjectBase64
  * Parse WebAuthn client data JSON
  * Returns parsed client data object
  */
-export function parseClientDataJSON(clientDataJSON: string): any {
+function parseClientDataJSON(clientDataJSON: string): any {
   try {
     // clientDataJSON is usually base64 encoded
     const decoded = Buffer.from(clientDataJSON, 'base64').toString('utf8');
@@ -230,3 +230,10 @@ export function parseClientDataJSON(clientDataJSON: string): any {
     }
   }
 }
+
+// Export all functions as CommonJS
+module.exports = {
+  extractPublicKeyFromAttestationObject,
+  extractCredentialIdFromAttestationObject,
+  parseClientDataJSON
+};

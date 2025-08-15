@@ -1,7 +1,7 @@
 import { Passkey } from 'react-native-passkey';
 import 'react-native-get-random-values';
 import { PORTO_CONFIG } from '../config/porto-config';
-import { extractPublicKeyFromAttestationObject } from './webauthnCborParser';
+const { extractPublicKeyFromAttestationObject } = require('./webauthnCborParser');
 import { defaultAbiCoder } from '@ethersproject/abi';
 import { BigNumber } from '@ethersproject/bignumber';
 
@@ -313,19 +313,7 @@ export class PasskeyManager {
     
     if (result.response?.attestationObject) {
       try {
-        // Debug: Check if the function is available
-        console.log('Type of extractPublicKeyFromAttestationObject:', typeof extractPublicKeyFromAttestationObject);
-        
-        if (typeof extractPublicKeyFromAttestationObject !== 'function') {
-          // Try requiring the module directly here as a fallback
-          const webauthnParser = require('./webauthnCborParser');
-          console.log('Loaded webauthnParser module:', Object.keys(webauthnParser));
-          const publicKeyHex = webauthnParser.extractPublicKeyFromAttestationObject(result.response.attestationObject);
-          console.log('Successfully extracted public key (via require):', publicKeyHex.substring(0, 20) + '...');
-          return publicKeyHex;
-        }
-        
-        // Use the imported function
+        // Extract the public key using the CommonJS imported function
         const publicKeyHex = extractPublicKeyFromAttestationObject(result.response.attestationObject);
         console.log('Successfully extracted public key:', publicKeyHex.substring(0, 20) + '...');
         return publicKeyHex;
