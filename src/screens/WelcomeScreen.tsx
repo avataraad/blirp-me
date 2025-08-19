@@ -25,35 +25,25 @@ type Props = {
 
 const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
   const { restoreFromCloudBackup } = useWallet();
+  const [showWalletOptions, setShowWalletOptions] = React.useState(false);
 
-  const handleSignIn = async () => {
-    if (!isCloudBackupAvailable()) {
-      Alert.alert(
-        'Not Available',
-        'Cloud backup requires iOS 17.0 or later.',
-      );
-      return;
-    }
+  const handleCreateWallet = () => {
+    setShowWalletOptions(true);
+  };
 
-    try {
-      // Get both private key and tag from passkey
-      const { tag, privateKey } = await restoreFromPasskey();
+  const handleCreateEOAWallet = () => {
+    setShowWalletOptions(false);
+    navigation.navigate('PhoneNumber');
+  };
 
-      // Restore the wallet with the retrieved tag and private key
-      const success = await restoreFromCloudBackup(tag, privateKey);
+  const handleCreatePortoWallet = () => {
+    setShowWalletOptions(false);
+    navigation.navigate('CreatePortoWallet');
+  };
 
-      if (success) {
-        navigation.navigate('MainTabs');
-      } else {
-        Alert.alert(
-          'Restore Failed',
-          'Could not restore wallet. Please try again.'
-        );
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      Alert.alert('Error', 'Failed to sign in with passkey');
-    }
+  const handleSignIn = () => {
+    // Navigate to SignInScreen where users can choose EOA or Porto wallet
+    navigation.navigate('SignIn');
   };
 
   return (
@@ -70,19 +60,59 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
 
         {/* Action Buttons */}
         <View style={styles.buttonSection}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => navigation.navigate('PhoneNumber')}
-          >
-            <Text style={styles.primaryButtonText}>Create New Wallet</Text>
-          </TouchableOpacity>
+          {!showWalletOptions ? (
+            <>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={handleCreateWallet}
+              >
+                <Text style={styles.primaryButtonText}>Create New Wallet</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleSignIn}
-          >
-            <Text style={styles.secondaryButtonText}>Sign In with Passkey</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleSignIn}
+              >
+                <Text style={styles.secondaryButtonText}>Sign In with Passkey</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.optionTitle}>Choose Wallet Type</Text>
+              
+              <TouchableOpacity
+                style={styles.walletOptionButton}
+                onPress={handleCreatePortoWallet}
+              >
+                <View style={styles.walletOptionContent}>
+                  <Text style={styles.walletOptionLabel}>Smart Wallet</Text>
+                  <Text style={styles.walletOptionBadge}>RECOMMENDED</Text>
+                </View>
+                <Text style={styles.walletOptionDescription}>
+                  Advanced features • Gas in USDC • No seed phrases
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.walletOptionButton}
+                onPress={handleCreateEOAWallet}
+              >
+                <View style={styles.walletOptionContent}>
+                  <Text style={styles.walletOptionLabel}>Standard Wallet</Text>
+                </View>
+                <Text style={styles.walletOptionDescription}>
+                  Traditional EOA wallet • Compatible everywhere
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowWalletOptions(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* Footer */}
@@ -192,6 +222,53 @@ const styles = StyleSheet.create({
     ...theme.typography.caption1,
     color: theme.colors.primary,
     textAlign: 'center',
+  },
+  optionTitle: {
+    ...theme.typography.title2,
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  walletOptionButton: {
+    backgroundColor: theme.colors.surface,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  walletOptionContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  walletOptionLabel: {
+    ...theme.typography.headline,
+    color: theme.colors.text.primary,
+  },
+  walletOptionBadge: {
+    ...theme.typography.caption1,
+    color: theme.colors.success,
+    fontWeight: '600',
+    backgroundColor: theme.colors.success + '20',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm,
+  },
+  walletOptionDescription: {
+    ...theme.typography.subheadline,
+    color: theme.colors.text.secondary,
+  },
+  cancelButton: {
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
   },
 });
 

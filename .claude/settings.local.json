@@ -25,7 +25,17 @@
       "Bash(open:*)",
       "WebFetch(domain:docs.socket.tech)",
       "Bash(grep:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(rm:*)",
+      "Bash(pod install:*)",
+      "Bash(npm start:*)",
+      "Bash(npx react-native bundle:*)",
+      "Bash(npx react-native start:*)",
+      "Bash(npm search:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

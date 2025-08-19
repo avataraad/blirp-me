@@ -16,6 +16,11 @@ const config = {
       'url': 'url',
       'text-encoding': 'text-encoding',
     },
+    // Ensure buffer polyfill is available globally
+    extraNodeModules: {
+      buffer: require.resolve('buffer'),
+      stream: require.resolve('readable-stream'),
+    },
   },
 };
 

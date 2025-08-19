@@ -126,8 +126,61 @@ class WalletService {
       .map(key => key.replace('wallet_', ''));
   }
 
-// Encrypt data (simplified - in production use proper encryption)
-async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
+  // Store wallet info (for both EOA and Porto wallets)
+  async storeWalletInfo(address: string, tag: string, type?: string): Promise<boolean> {
+    try {
+      const walletInfo = {
+        address,
+        tag,
+        type: type || 'EOA',
+        createdAt: Date.now()
+      };
+      storage.set(`wallet_info:${address}`, JSON.stringify(walletInfo));
+      storage.set(`wallet_tag:${tag}`, address);
+      storage.set(`wallet_${tag}`, JSON.stringify(walletInfo));
+      return true;
+    } catch (error) {
+      console.error('Error storing wallet info:', error);
+      return false;
+    }
+  }
+
+  // Store passkey ID for Porto wallet
+  async storePasskeyId(address: string, passkeyId: string): Promise<boolean> {
+    try {
+      storage.set(`passkey:${address}`, passkeyId);
+      return true;
+    } catch (error) {
+      console.error('Error storing passkey ID:', error);
+      return false;
+    }
+  }
+
+  // Get passkey ID for Porto wallet
+  async getPasskeyId(address: string): Promise<string | null> {
+    try {
+      return storage.getString(`passkey:${address}`) || null;
+    } catch (error) {
+      console.error('Error getting passkey ID:', error);
+      return null;
+    }
+  }
+
+  // Get wallet type
+  async getWalletType(address: string): Promise<'EOA' | 'Porto' | null> {
+    try {
+      const infoStr = storage.getString(`wallet_info:${address}`);
+      if (!infoStr) return null;
+      const info = JSON.parse(infoStr);
+      return info.type || 'EOA';
+    } catch (error) {
+      console.error('Error getting wallet type:', error);
+      return null;
+    }
+  }
+
+  // Encrypt data (simplified - in production use proper encryption)
+  async encryptData(data: string, _key: string): Promise<EncryptedSeed> {
     // For now, we'll use a simple base64 encoding
     const ciphertext = Buffer.from(data).toString('base64');
     const iv = Buffer.from(Math.random().toString()).toString('base64');

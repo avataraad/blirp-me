@@ -7,22 +7,33 @@ import walletService from '../services/walletService';
 import userProfileService from '../services/userProfileService';
 import { CloudBackup, isCloudBackupAvailable } from '../modules/cloudBackup';
 import { createBackup } from '../modules/cloudBackup/helpers';
+import portoService from '../services/portoService';
+import { PasskeyManager } from '../services/passkeyManager';
+
+type WalletType = 'EOA' | 'Porto';
 
 interface WalletData {
   address: string;
   tag: string;
+  type: WalletType;
+  passkeyId?: string;  // For Porto wallets
 }
 
 interface WalletContextType {
   walletAddress: string | null;
   walletTag: string | null;
   wallet: WalletData | null;
+  walletType: WalletType | null;
   balance: string;
   balanceInUSD: number;
+  usdcBalance?: string;  // For Porto wallets
+  usdcBalanceInUSD?: number;  // For Porto wallets
   isLoading: boolean;
   createWallet: (tag: string) => Promise<{ success: boolean; wallet?: WalletData }>;
+  createPortoWallet: (tag: string) => Promise<{ success: boolean; wallet?: WalletData }>;
   unlockWallet: (tag: string) => Promise<boolean>;
   restoreFromCloudBackup: (tag: string, privateKey?: string) => Promise<boolean>;
+  restorePortoWallet: (address: string, tag: string) => Promise<boolean>;
   refreshBalance: () => Promise<void>;
   signTransaction: (transaction: TransactionRequest) => Promise<string>;
   logout: () => void;
@@ -46,8 +57,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletTag, setWalletTag] = useState<string | null>(null);
   const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [balance, setBalance] = useState<string>('0.0000');
   const [balanceInUSD, setBalanceInUSD] = useState<number>(0);
+  const [usdcBalance, setUsdcBalance] = useState<string>('0.00');
+  const [usdcBalanceInUSD, setUsdcBalanceInUSD] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Create new wallet
@@ -113,17 +127,76 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         }
       }
 
-      // Create wallet data object
-      const walletData: WalletData = { address, tag };
+      // Create wallet data object for EOA
+      const walletData: WalletData = { 
+        address, 
+        tag, 
+        type: 'EOA' 
+      };
 
       // Store wallet data in state (NOT the private key)
       setWalletAddress(address);
       setWalletTag(tag);
       setWallet(walletData);
+      setWalletType('EOA');
 
       return { success: true, wallet: walletData };
     } catch (error) {
       console.error('Error creating wallet:', error);
+      return { success: false };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Create new Porto wallet
+  const createPortoWallet = async (tag: string): Promise<{ success: boolean; wallet?: WalletData }> => {
+    try {
+      setIsLoading(true);
+
+      // Check if tag is available
+      const isAvailable = await userProfileService.isTagAvailable(tag);
+      if (!isAvailable) {
+        throw new Error('Username already taken');
+      }
+
+      // Create Porto wallet (which includes passkey creation)
+      console.log('📱 Creating Porto wallet...');
+      const portoWallet = await portoService.createPortoWallet(tag);
+      
+      // Store wallet info in MMKV
+      const stored = await walletService.storeWalletInfo(
+        portoWallet.address,
+        tag,
+        'Porto'  // Store type indicator
+      );
+
+      if (!stored) {
+        throw new Error('Failed to store Porto wallet');
+      }
+
+      // Store passkey ID for later use
+      if (portoWallet.passkeyId) {
+        await walletService.storePasskeyId(portoWallet.address, portoWallet.passkeyId);
+      }
+
+      // Create wallet data object for Porto
+      const walletData: WalletData = { 
+        address: portoWallet.address, 
+        tag, 
+        type: 'Porto',
+        passkeyId: portoWallet.passkeyId
+      };
+
+      // Store wallet data in state
+      setWalletAddress(portoWallet.address);
+      setWalletTag(tag);
+      setWallet(walletData);
+      setWalletType('Porto');
+
+      return { success: true, wallet: walletData };
+    } catch (error) {
+      console.error('Error creating Porto wallet:', error);
       return { success: false };
     } finally {
       setIsLoading(false);
@@ -259,6 +332,29 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   };
 
+  // Restore Porto wallet
+  const restorePortoWallet = async (address: string, tag: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+
+      // For Porto wallets, we don't have a private key
+      // The wallet is a smart contract wallet controlled by passkeys
+      setWalletAddress(address);
+      setWalletTag(tag);
+      setWallet({ address, tag });
+
+      // Refresh balance
+      await refreshBalance();
+
+      return true;
+    } catch (error) {
+      console.error('Error restoring Porto wallet:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Restore wallet from cloud backup
   const restoreFromCloudBackup = async (tag: string, privateKey?: string): Promise<boolean> => {
     try {
@@ -352,12 +448,17 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         walletAddress,
         walletTag,
         wallet,
+        walletType,
         balance,
         balanceInUSD,
+        usdcBalance,
+        usdcBalanceInUSD,
         isLoading,
         createWallet,
+        createPortoWallet,
         unlockWallet,
         restoreFromCloudBackup,
+        restorePortoWallet,
         refreshBalance,
         signTransaction,
         logout,
