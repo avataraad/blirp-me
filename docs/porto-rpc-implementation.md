@@ -7,9 +7,10 @@ This document outlines the implementation of Porto smart wallets in React Native
 We successfully implemented Porto smart wallets in React Native after encountering and solving several challenges:
 1. Porto SDK had browser dependencies (import.meta, stream module) incompatible with React Native/Hermes
 2. Switched to direct RPC server communication approach
-3. Fixed CBOR parsing issues by using `borc` library instead of `cbor-js` or `cbor-x`
+3. Fixed CBOR parsing issues by implementing a pure JavaScript CBOR decoder inline (avoiding Metro bundler issues)
 4. Discovered correct RPC request structures through trial and error
-5. Successfully created counterfactual smart wallets on Base mainnet
+5. Successfully created counterfactual smart wallets on Base mainnet and testnet
+6. Extracted P-256 public key coordinates from WebAuthn attestationObject using custom CBOR parser
 
 ## Architecture Overview
 
@@ -48,7 +49,8 @@ const PORTO_CONFIG = {
 #### 1. CBOR Library Choice Matters
 - ❌ `cbor-x` - Has Node.js dependencies (stream module), fails in React Native
 - ❌ `cbor-js` - Has issues with DataView operations in React Native
-- ✅ `borc` - Works perfectly in React Native, handles Buffer/ArrayBuffer correctly
+- ❌ `borc` - Metro bundler cannot resolve the module correctly
+- ✅ **Pure JavaScript inline CBOR decoder** - Implemented custom decoder that works in React Native without external dependencies
 
 #### 2. Correct RPC Request Structures
 ```typescript
@@ -213,11 +215,15 @@ const result = await Passkey.create(createRequest);
 
 // Must extract the public key from the attestationObject:
 // 1. Base64 decode the attestationObject
-// 2. CBOR decode it
-// 3. Parse the authData structure
+// 2. CBOR decode it (using inline decoder to avoid Metro bundler issues)
+// 3. Parse the authData structure (handle Map vs plain object)
 // 4. Extract the credential public key (COSE format)
 // 5. Get the x and y coordinates (-2 and -3 in COSE key map)
 // 6. Combine as: 0x + xHex (32 bytes) + yHex (32 bytes)
+
+// Note: CBOR decoder may return Map objects. Access with:
+// - map.get('authData') for Map objects
+// - obj['authData'] for plain objects
 
 // Example working public key format:
 // 0xe47d158a3fab40a4e92750dc26eab5ea3b84c3e65d2a1a076c3f984197e988852b22858b5445a3bd139d71ecc35e7755d155d2bbc620c4e8dd79c1a09d93a50a
@@ -915,7 +921,7 @@ class PortoOptimizations {
 
 ### 2. "stream module not found"
 - **Cause**: cbor-x has Node.js dependencies
-- **Solution**: Use `borc` instead
+- **Solution**: Implement inline CBOR decoder in pure JavaScript
 
 ### 3. "Invalid params - expected a sequence"
 - **Cause**: Wrong parameter format for wallet_getCapabilities
