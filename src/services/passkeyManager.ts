@@ -1,9 +1,9 @@
 import { Passkey } from 'react-native-passkey';
 import 'react-native-get-random-values';
 import { PORTO_CONFIG } from '../config/porto-config';
-const { extractPublicKeyFromAttestationObject } = require('./webauthnCborParser');
 import { defaultAbiCoder } from '@ethersproject/abi';
 import { BigNumber } from '@ethersproject/bignumber';
+import { Buffer } from 'buffer';
 
 // Use crypto.getRandomValues which is polyfilled by react-native-get-random-values
 const randomBytes = (size: number): Uint8Array => {
@@ -11,6 +11,143 @@ const randomBytes = (size: number): Uint8Array => {
   crypto.getRandomValues(bytes);
   return bytes;
 };
+
+/**
+ * Pure JavaScript CBOR decoder for WebAuthn attestation objects
+ * Minimal implementation that works in React Native without external dependencies
+ */
+class SimpleCBORDecoder {
+  private data: Uint8Array;
+  private offset: number;
+
+  constructor(data: Uint8Array | Buffer) {
+    this.data = new Uint8Array(data);
+    this.offset = 0;
+  }
+
+  decode(): any {
+    if (this.offset >= this.data.length) {
+      throw new Error('Unexpected end of CBOR data');
+    }
+
+    const type = this.data[this.offset];
+    const majorType = type >> 5;
+    const additionalInfo = type & 0x1f;
+
+    this.offset++;
+
+    switch (majorType) {
+      case 0: // Unsigned integer
+        return this.decodeInteger(additionalInfo);
+      case 1: // Negative integer
+        return -1 - this.decodeInteger(additionalInfo);
+      case 2: // Byte string
+        return this.decodeByteString(additionalInfo);
+      case 3: // Text string
+        return this.decodeTextString(additionalInfo);
+      case 4: // Array
+        return this.decodeArray(additionalInfo);
+      case 5: // Map
+        return this.decodeMap(additionalInfo);
+      case 6: // Tagged (we'll ignore tags for WebAuthn)
+        this.decodeInteger(additionalInfo); // Skip tag
+        return this.decode(); // Decode tagged value
+      case 7: // Floats and other
+        return this.decodeSimple(additionalInfo);
+      default:
+        throw new Error(`Unknown CBOR major type: ${majorType}`);
+    }
+  }
+
+  private decodeInteger(additionalInfo: number): number {
+    if (additionalInfo < 24) {
+      return additionalInfo;
+    }
+    
+    if (additionalInfo === 24) {
+      return this.data[this.offset++];
+    }
+    
+    if (additionalInfo === 25) {
+      const value = (this.data[this.offset] << 8) | this.data[this.offset + 1];
+      this.offset += 2;
+      return value;
+    }
+    
+    if (additionalInfo === 26) {
+      const value = (this.data[this.offset] << 24) | 
+                   (this.data[this.offset + 1] << 16) |
+                   (this.data[this.offset + 2] << 8) |
+                   this.data[this.offset + 3];
+      this.offset += 4;
+      return value >>> 0; // Convert to unsigned
+    }
+    
+    if (additionalInfo === 27) {
+      // 64-bit integer - JavaScript can't handle full precision
+      // For our use case, we'll just skip it
+      this.offset += 8;
+      return 0;
+    }
+    
+    throw new Error(`Invalid integer encoding: ${additionalInfo}`);
+  }
+
+  private decodeByteString(additionalInfo: number): Uint8Array {
+    const length = this.decodeInteger(additionalInfo);
+    const bytes = this.data.slice(this.offset, this.offset + length);
+    this.offset += length;
+    return bytes;
+  }
+
+  private decodeTextString(additionalInfo: number): string {
+    const length = this.decodeInteger(additionalInfo);
+    const bytes = this.data.slice(this.offset, this.offset + length);
+    this.offset += length;
+    
+    // TextDecoder doesn't exist in React Native, use Buffer instead
+    // Buffer.from() can handle UTF-8 decoding
+    return Buffer.from(bytes).toString('utf8');
+  }
+
+  private decodeArray(additionalInfo: number): any[] {
+    const length = this.decodeInteger(additionalInfo);
+    const array: any[] = [];
+    for (let i = 0; i < length; i++) {
+      array.push(this.decode());
+    }
+    return array;
+  }
+
+  private decodeMap(additionalInfo: number): Map<any, any> {
+    const length = this.decodeInteger(additionalInfo);
+    const map = new Map();
+    for (let i = 0; i < length; i++) {
+      const key = this.decode();
+      const value = this.decode();
+      map.set(key, value);
+    }
+    return map;
+  }
+
+  private decodeSimple(additionalInfo: number): any {
+    if (additionalInfo === 20) return false;
+    if (additionalInfo === 21) return true;
+    if (additionalInfo === 22) return null;
+    if (additionalInfo === 23) return undefined;
+    
+    // We don't need float support for WebAuthn
+    throw new Error(`Unsupported simple value: ${additionalInfo}`);
+  }
+}
+
+/**
+ * Decode CBOR data using pure JavaScript
+ */
+function decodeCBOR(data: Uint8Array | Buffer): any {
+  const decoder = new SimpleCBORDecoder(data);
+  return decoder.decode();
+}
 
 interface WebAuthnKey {
   type: 'webauthnp256';
@@ -313,22 +450,168 @@ export class PasskeyManager {
     
     if (result.response?.attestationObject) {
       try {
-        // Extract the public key using the CommonJS imported function
-        const publicKeyHex = extractPublicKeyFromAttestationObject(result.response.attestationObject);
+        // Inline CBOR extraction logic to avoid Metro bundler issues
+        const attestationObjectBase64 = result.response.attestationObject;
+        
+        console.log('Starting inline CBOR extraction with pure JS decoder...');
+        
+        // Decode base64 to buffer
+        const attestationObjectBytes = Buffer.from(attestationObjectBase64, 'base64');
+        console.log('Decoded base64, buffer length:', attestationObjectBytes.length);
+        
+        // CBOR decode using pure JavaScript implementation
+        const attestationObject = decodeCBOR(attestationObjectBytes);
+        console.log('Decoded attestationObject:', {
+          fmt: attestationObject.fmt,
+          hasAuthData: !!attestationObject.authData,
+          hasAttStmt: !!attestationObject.attStmt
+        });
+        
+        // Extract authData
+        const authData = attestationObject.authData;
+        if (!authData) {
+          throw new Error('No authData in attestationObject');
+        }
+        
+        // Parse authData structure
+        // authData format:
+        // - 32 bytes: RP ID hash
+        // - 1 byte: flags
+        // - 4 bytes: counter
+        // - variable: attestedCredentialData (if present)
+        // - variable: extensions (if present)
+        
+        let offset = 0;
+        
+        // Skip RP ID hash (32 bytes)
+        offset += 32;
+        
+        // Read flags (1 byte)
+        const flags = authData[offset];
+        offset += 1;
+        console.log('Flags:', flags.toString(16), 'Has attested credential data:', !!(flags & 0x40));
+        
+        // Skip counter (4 bytes)
+        offset += 4;
+        
+        // Check if attestedCredentialData is present (flag bit 6)
+        if (!(flags & 0x40)) {
+          throw new Error('No attestedCredentialData in authData');
+        }
+        
+        // Parse attestedCredentialData
+        // - 16 bytes: AAGUID
+        // - 2 bytes: credentialIdLength
+        // - variable: credentialId
+        // - variable: credentialPublicKey (COSE key)
+        
+        // Skip AAGUID (16 bytes)
+        offset += 16;
+        
+        // Read credentialIdLength (2 bytes, big-endian)
+        const credentialIdLength = (authData[offset] << 8) | authData[offset + 1];
+        offset += 2;
+        console.log('Credential ID length:', credentialIdLength);
+        
+        // Skip credentialId
+        offset += credentialIdLength;
+        
+        // Now we're at the credentialPublicKey (COSE key)
+        // Extract the remaining bytes and decode as CBOR
+        const publicKeyBytes = authData.slice(offset);
+        console.log('Public key bytes length:', publicKeyBytes.length);
+        
+        const coseKey = decodeCBOR(publicKeyBytes);
+        console.log('COSE Key decoded, type:', typeof coseKey);
+        
+        // COSE key map:
+        // 1 = kty (key type, 2 = EC2)
+        // 3 = alg (algorithm, -7 = ES256)
+        // -1 = crv (curve, 1 = P-256)
+        // -2 = x coordinate
+        // -3 = y coordinate
+        
+        // Check if it's a Map or plain object
+        let x, y;
+        
+        // borc returns a Map object, but Map might not be available in all environments
+        // Try multiple approaches to extract the coordinates
+        if (typeof coseKey.get === 'function') {
+          // It's a Map-like object
+          console.log('COSE Key is a Map-like object');
+          x = coseKey.get(-2);
+          y = coseKey.get(-3);
+          
+          // Debug: log all keys in the Map
+          console.log('COSE Key Map entries:');
+          if (typeof coseKey.forEach === 'function') {
+            coseKey.forEach((value: any, key: any) => {
+              console.log(`  Key ${key}:`, value);
+            });
+          }
+        } else if (typeof coseKey === 'object' && coseKey !== null) {
+          // Plain object - try both negative number keys and string keys
+          console.log('COSE Key is a plain object');
+          x = coseKey[-2] || coseKey['-2'];
+          y = coseKey[-3] || coseKey['-3'];
+          
+          // Debug: log all keys in the object
+          console.log('COSE Key object keys:', Object.keys(coseKey));
+        }
+        
+        if (!x || !y) {
+          console.error('Missing coordinates in COSE key:', { x, y, coseKey });
+          throw new Error('Missing x or y coordinate in COSE key');
+        }
+        
+        // Convert to hex - handle both Buffer and Uint8Array
+        const xBuffer = Buffer.isBuffer(x) ? x : Buffer.from(x);
+        const yBuffer = Buffer.isBuffer(y) ? y : Buffer.from(y);
+        
+        const xHex = xBuffer.toString('hex');
+        const yHex = yBuffer.toString('hex');
+        
+        console.log('X coordinate (hex):', xHex);
+        console.log('Y coordinate (hex):', yHex);
+        
+        // Ensure 32 bytes (64 hex chars) each - pad with zeros if needed
+        const xPadded = xHex.padStart(64, '0');
+        const yPadded = yHex.padStart(64, '0');
+        
+        if (xPadded.length !== 64 || yPadded.length !== 64) {
+          console.warn('Unexpected coordinate length after padding:', { 
+            xLen: xPadded.length, 
+            yLen: yPadded.length 
+          });
+        }
+        
+        // Combine as 0x + x + y
+        const publicKeyHex = '0x' + xPadded + yPadded;
+        
         console.log('Successfully extracted public key:', publicKeyHex.substring(0, 20) + '...');
+        console.log('Full public key length:', publicKeyHex.length, 'chars (should be 130)');
+        
         return publicKeyHex;
+        
       } catch (error) {
         console.error('Failed to extract public key, using fallback:', error);
         console.error('Error details:', {
           message: error.message,
           stack: error.stack
         });
+        
+        // More detailed error logging
+        if (error instanceof Error) {
+          console.error('Error name:', error.name);
+          console.error('Error message:', error.message);
+        }
       }
     }
     
     // Fallback: For testing, we can use a dummy public key
     // In production, this should be the actual extracted key
     console.warn('Using fallback public key for testing');
+    console.warn('This wallet will not work for real transactions!');
     
     // Generate a dummy 64-byte hex string (32 bytes X + 32 bytes Y)
     const fallbackKey = '0x' + '1'.repeat(64) + '2'.repeat(64);
