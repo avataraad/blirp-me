@@ -461,14 +461,20 @@ export class PasskeyManager {
         
         // CBOR decode using pure JavaScript implementation
         const attestationObject = decodeCBOR(attestationObjectBytes);
+        
+        // attestationObject is a Map, not a plain object
+        // Access properties using Map.get()
+        const fmt = attestationObject.get ? attestationObject.get('fmt') : attestationObject['fmt'];
+        const authData = attestationObject.get ? attestationObject.get('authData') : attestationObject['authData'];
+        const attStmt = attestationObject.get ? attestationObject.get('attStmt') : attestationObject['attStmt'];
+        
         console.log('Decoded attestationObject:', {
-          fmt: attestationObject.fmt,
-          hasAuthData: !!attestationObject.authData,
-          hasAttStmt: !!attestationObject.attStmt
+          fmt: fmt,
+          hasAuthData: !!authData,
+          hasAttStmt: !!attStmt,
+          isMap: attestationObject instanceof Map
         });
         
-        // Extract authData
-        const authData = attestationObject.authData;
         if (!authData) {
           throw new Error('No authData in attestationObject');
         }
